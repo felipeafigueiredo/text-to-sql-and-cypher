@@ -47,12 +47,24 @@ Leva cerca de 1 minuto e grava 6 arquivos CSV (66 MB). Suba-os para uma pasta do
 
 **2. Preparar o ambiente e validar o servidor.** Abra [notebooks/01_preparacao_e_servidor.ipynb](notebooks/01_preparacao_e_servidor.ipynb) no Colab (*Arquivo → Abrir notebook → GitHub*), mantenha o runtime padrão (só CPU), ajuste `DRIVE_DIR` na primeira célula e rode tudo.
 
+**3. Os agentes.** Abra [notebooks/02_agentes.ipynb](notebooks/02_agentes.ipynb) com o runtime **T4 GPU**, ajuste `DRIVE_DIR` e rode tudo. A primeira célula prepara a sessão sozinha (`ambiente/preparar.py`, cerca de 8 minutos) e as seguintes mostram os agentes respondendo, com o trace de cada consulta.
+
+## Avaliação
+
+`avaliacao/perguntas.py` tem as 20 perguntas, cada uma com categoria, banco, ferramenta esperada e a consulta de referência que calcula o gabarito direto nos bancos. Para ver as perguntas com o gabarito:
+
+```bash
+python avaliacao/gabarito.py
+```
+
 ## Estrutura
 
 | Pasta | Conteúdo |
 |---|---|
 | `dados/` | recorte do dataset, esquema SQL e carga nos dois bancos |
 | `servidor/` | servidor MCP e sua validação |
-| `ambiente/` | instalação dos bancos, do servidor e do Ollama no Colab |
+| `agentes/` | código comum (sessão MCP, modelo, medição, `answer()`) e um arquivo por sistema |
+| `avaliacao/` | as 20 perguntas, o gabarito e a checagem automática |
+| `ambiente/` | instalação dos bancos, do servidor e do Ollama no Colab, e a preparação de uma sessão |
 | `notebooks/` | notebooks para rodar no Colab |
 | `resultados/` | evidências e resultados das execuções |
