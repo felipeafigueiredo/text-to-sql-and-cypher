@@ -35,7 +35,7 @@ Chamadas incorretas devolvem erro de execução (`isError`) com uma dica do que 
 
 ## Como executar
 
-Tudo roda no **Google Colab** com GPU T4, sem Docker.
+Tudo roda no **Google Colab**, sem Docker. Só os notebooks que usam o modelo precisam de GPU T4.
 
 **1. Gerar o recorte (uma vez, na sua máquina).** Baixe o dataset em yelp.com/dataset e rode:
 
@@ -45,7 +45,7 @@ python dados/recorte.py "<pasta com os yelp_academic_dataset_*.json>" dados/reco
 
 Leva cerca de 1 minuto e grava 6 arquivos CSV (66 MB). Suba-os para uma pasta do seu Google Drive.
 
-**2. Preparar o ambiente e validar o servidor.** Abra [notebooks/01_preparacao_e_servidor.ipynb](notebooks/01_preparacao_e_servidor.ipynb) no Colab (*Arquivo → Abrir notebook → GitHub*), escolha o runtime T4, ajuste `DRIVE_DIR` na primeira célula e rode tudo.
+**2. Preparar o ambiente e validar o servidor.** Abra [notebooks/01_preparacao_e_servidor.ipynb](notebooks/01_preparacao_e_servidor.ipynb) no Colab (*Arquivo → Abrir notebook → GitHub*), mantenha o runtime padrão (só CPU), ajuste `DRIVE_DIR` na primeira célula e rode tudo.
 
 ## Estrutura
 
