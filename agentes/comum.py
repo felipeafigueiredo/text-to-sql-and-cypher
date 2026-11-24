@@ -10,17 +10,19 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
 import psutil
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.resources import load_mcp_resources
 from langchain_mcp_adapters.tools import load_mcp_tools
 from langchain_ollama import ChatOllama
 from langgraph.errors import GraphRecursionError
 from langgraph.prebuilt import ToolNode
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELO = os.environ.get("YELP_MODELO", "qwen3:8b")
@@ -39,9 +41,13 @@ class Servidor:
     contexto do cliente MCP precisa abrir e fechar na mesma tarefa (no Colab, cada célula roda numa tarefa diferente).
 
     python e libs: o servidor roda com as bibliotecas de servidor_libs/ (mcp 2.x), separadas das do notebook (mcp 1.x).
+
+    A sessão é aberta direto pelo SDK do mcp, e não pelo MultiServerMCPClient, para mandar o stderr do servidor para um
+    arquivo: o adaptador usa o sys.stderr, que no kernel do Colab não tem fileno() e derruba a partida do servidor.
     """
 
     URIS = ("esquema://sql", "esquema://grafo")
+    LOG = os.path.join(tempfile.gettempdir(), "servidor_mcp.log")
 
     def __init__(self, python=None, libs=None):
         self.python = python or os.environ.get("YELP_SERVIDOR_PYTHON", sys.executable)
@@ -55,15 +61,19 @@ class Servidor:
             env["PYTHONPATH"] = self.libs
         # sem log do servidor na tela: o erro de cada ferramenta já volta ao modelo e fica na medição
         env.update(FASTMCP_LOG_LEVEL="CRITICAL", FASTMCP_SHOW_SERVER_BANNER="false")
-        return {"transport": "stdio", "command": self.python, "args": [os.path.join(RAIZ, "servidor", "server.py")], "env": env}
+        return StdioServerParameters(command=self.python, args=[os.path.join(RAIZ, "servidor", "server.py")], env=env)
 
     async def _dono(self):
         try:
-            async with MultiServerMCPClient({"yelp": self.conexao()}).session("yelp") as sessao:
-                self.ferramentas = await load_mcp_tools(sessao)
-                self.esquemas = {b.metadata["uri"]: b.as_string() for b in await load_mcp_resources(sessao, uris=list(self.URIS))}
-                self._pronto.set()
-                await self._fim.wait()
+            with open(self.LOG, "w", encoding="utf-8") as log:
+                async with stdio_client(self.conexao(), errlog=log) as (leitura, escrita), \
+                        ClientSession(leitura, escrita) as sessao:
+                    await sessao.initialize()
+                    self.ferramentas = await load_mcp_tools(sessao)
+                    self.esquemas = {b.metadata["uri"]: b.as_string()
+                                     for b in await load_mcp_resources(sessao, uris=list(self.URIS))}
+                    self._pronto.set()
+                    await self._fim.wait()
         finally:
             self._pronto.set()
 
