@@ -23,7 +23,7 @@ espera_porta() {   # espera_porta <porta> <segundos> <nome>
   echo "❌ $3 não abriu a porta $1 em $2 s"; return 1
 }
 
-bancos() {
+parte_bancos() {
   local cache="${1:-}"
   local faltam=""
   command -v psql > /dev/null || faltam="$faltam postgresql"
@@ -57,7 +57,7 @@ bancos() {
   espera_porta 7687 180 "Neo4j" || { tail -n 30 "$NEO4J_HOME/logs/neo4j.log"; exit 1; }
 }
 
-servidor() {
+parte_servidor() {
   if [ -d "$RAIZ/servidor_libs/fastmcp" ]; then
     echo "✅ bibliotecas do servidor já estão em servidor_libs/"
   else
@@ -68,27 +68,28 @@ servidor() {
   fi
 }
 
-ollama() {
+parte_ollama() {
   local modelo="${1:-qwen3:8b}"
   if ! command -v ollama > /dev/null; then
     echo "⏳ instalando o Ollama"
     apt-get -qq install -y zstd > /dev/null 2>&1 || true
     curl -fsSL https://ollama.com/install.sh | sh > /dev/null 2>&1
+    command -v ollama > /dev/null || { echo "❌ a instalação do Ollama falhou"; exit 1; }
   fi
   if ! (echo > /dev/tcp/127.0.0.1/11434) 2>/dev/null; then
     nohup ollama serve > /content/ollama.log 2>&1 &
   fi
-  espera_porta 11434 30 "Ollama"
-  if ! command ollama list | grep -q "^$modelo"; then
+  espera_porta 11434 30 "Ollama" || { tail -n 30 /content/ollama.log; exit 1; }
+  if ! ollama list | grep -q "^$modelo"; then
     echo "⏳ baixando $modelo (~5 GB, alguns minutos sem mostrar progresso)"
-    command ollama pull "$modelo" > /dev/null 2>&1
+    ollama pull "$modelo" > /dev/null 2>&1 || { echo "❌ não consegui baixar $modelo"; exit 1; }
   fi
   echo "✅ modelo $modelo pronto"
 }
 
 case "${1:-}" in
-  bancos)   bancos "${2:-}" ;;
-  servidor) servidor ;;
-  ollama)   ollama "${2:-}" ;;
+  bancos)   parte_bancos "${2:-}" ;;
+  servidor) parte_servidor ;;
+  ollama)   parte_ollama "${2:-}" ;;
   *) echo "uso: bash ambiente/instalar_colab.sh <bancos|servidor|ollama> [argumento]"; exit 2 ;;
 esac
