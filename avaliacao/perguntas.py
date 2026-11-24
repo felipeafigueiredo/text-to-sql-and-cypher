@@ -54,6 +54,10 @@ def num(x):
     return rf"(?<![\d.,]){d}(?![\d]|[,.]\d)"
 
 
+# A resposta reconhece um empate: "empatam", "empate", "a mesma nota", "notas iguais", "todos têm 4.5"...
+EMPATE = r"empat|mesma nota|nota igual|notas iguais|todos (?:os três )?(?:têm|tem)|os três (?:têm|tem)"
+
+
 def chave(nome):
     """Uma palavra marcante de um nome, para conferir se a resposta o cita (ignora apóstrofo e caixa)."""
     palavras = [p for p in re.findall(r"[A-Za-z]+", nome) if len(p) >= 4 and p.lower() not in ("restaurant", "santa", "barbara")]
@@ -119,9 +123,11 @@ def _(db):
     melhores = [x["name"] for x in r if x["stars"] == nota]
     mais = max(r, key=lambda x: x["checkin_count"])
     empate = (f"Os três empatam na nota, {nota}" if len(melhores) == 3 else f"Melhor nota: {', '.join(melhores)} ({nota})")
+    # Com empate, a resposta precisa dizer que empataram: apontar um "melhor" entre notas iguais está errado.
+    deve_nota = [EMPATE] if len(melhores) > 1 else [chave(melhores[0])]
     return gab(f"{empate}. Mais check-ins: {mais['name']} ({mais['checkin_count']}). "
                + "; ".join(f"{x['name']}: nota {x['stars']}, {x['checkin_count']} check-ins" for x in r) + ".",
-               deve=[chave(mais["name"]), num(mais["checkin_count"])])
+               deve=deve_nota + [chave(mais["name"]), num(mais["checkin_count"])])
 
 
 @pergunta("P06", "Os restaurantes italianos ou os japoneses têm a nota média maior em Santa Barbara?",

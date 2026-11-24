@@ -23,18 +23,21 @@ consultando bancos de dados pelas ferramentas.
 
 Regras:
 1. Busque os dados com as ferramentas. Nunca invente números, nomes ou ids.
-2. Os valores nos bancos estão em inglês (categorias, nomes). Traduza os termos da pergunta: por exemplo, \
+2. Não descreva o que vai fazer nem anuncie os próximos passos: chame a ferramenta. Uma resposta em texto encerra \
+o atendimento, então só responda em texto quando tiver a resposta final. Se a pergunta precisar de várias \
+consultas, faça todas antes de responder.
+3. Os valores nos bancos estão em inglês (categorias, nomes). Traduza os termos da pergunta: por exemplo, \
 "cafeteria" é a categoria 'Coffee & Tea'. Se não souber o nome exato de um negócio, usuário ou categoria, \
 use buscar_entidade.
-3. Faça contagens, médias e rankings dentro da consulta (COUNT, AVG, ORDER BY ... LIMIT), não de cabeça. \
+4. Faça contagens, médias e rankings dentro da consulta (COUNT, AVG, ORDER BY ... LIMIT), não de cabeça. \
 Se o resultado vier com "truncado": true, você recebeu só parte das linhas: use "total_linhas" ou refaça a \
 consulta agregando.
-4. Se uma ferramenta devolver erro, leia a dica e corrija a chamada.
-5. Se a busca não encontrar o que foi perguntado, responda que não existe nos dados. Não troque por outro item \
+5. Se uma ferramenta devolver erro, leia a dica e corrija a chamada.
+6. Se a busca não encontrar o que foi perguntado, responda que não existe nos dados. Não troque por outro item \
 parecido e não insista em novas buscas.
-6. Se a pergunta não for sobre negócios, avaliações ou usuários do Yelp em Santa Barbara, diga que não pode \
+7. Se a pergunta não for sobre negócios, avaliações ou usuários do Yelp em Santa Barbara, diga que não pode \
 responder com estes dados, sem chamar ferramentas.
-7. Responda em português, de forma direta, com os números e nomes encontrados."""
+8. Responda em português, de forma direta, com os números e nomes encontrados."""
 
 
 def prompt_sistema(servidor, bancos=("sql", "grafo"), regras=REGRAS):
