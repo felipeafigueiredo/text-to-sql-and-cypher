@@ -134,6 +134,8 @@ class Medicao:
     def __init__(self):
         self.modelo, self.ferramentas = [], []
         self.rota = None                   # o banco escolhido pelo roteador (sistema 2); None nos outros sistemas
+        self.verificacoes = []             # vereditos do verificador (sistema 3); vazio nos outros sistemas
+        self.respostas_anteriores = []     # respostas devolvidas pelo verificador, antes da final (sistema 3)
 
     def registrar_modelo(self, msg, agente, segundos):
         uso = getattr(msg, "usage_metadata", None) or {}
@@ -251,8 +253,10 @@ class Sistema:
             tokens_entrada=sum(c["tokens_entrada"] for c in m.modelo),
             tokens_saida=sum(c["tokens_saida"] for c in m.modelo),
             segundos=round(time.time() - t, 2), **amostras.resumo(),
+            devolucoes=sum(v["devolvida"] for v in m.verificacoes) if m.verificacoes else None,
             estourou_limite=estourou, erro=erro,
-            chamadas=m.modelo, consultas=m.ferramentas, mensagens=mensagens)
+            chamadas=m.modelo, consultas=m.ferramentas, verificacoes=m.verificacoes,
+            respostas_anteriores=[limpar(x) for x in m.respostas_anteriores], mensagens=mensagens)
 
 
 def resposta_final(mensagens):
@@ -266,10 +270,27 @@ def mostrar(r, largura=220):
     print(f"👤 {r['pergunta']}\n")
     if r.get("rota"):
         print(f"   🧭 roteador → {r['rota']}")
-    for c in r["consultas"]:
+    # o verificador fala depois das consultas da sua rodada: intercala pelos índices guardados no veredito
+    vereditos = {v["apos_consulta"]: [] for v in r.get("verificacoes", [])}
+    for v in r.get("verificacoes", []):
+        vereditos[v["apos_consulta"]].append(v)
+
+    def mostrar_vereditos(i):
+        for v in vereditos.get(i, []):
+            if v["aprovada"]:
+                print("   🔎 verificador: aprovada" + (" (saída fora do formato, conta como aprovada)" if v.get("falhou") else ""))
+            else:
+                print(f"   🔎 verificador {'devolveu' if v['devolvida'] else 'reprovou, sem devoluções restantes'}: "
+                      f"{v['objecao'][:largura]}")
+                print(f"      evidência: {v['evidencia'][:largura]}")
+                print(f"      resposta avaliada: {v['resposta'].replace(chr(10), ' ')[:largura]}")
+
+    for i, c in enumerate(r["consultas"]):
+        mostrar_vereditos(i)
         args = json.dumps(c["argumentos"], ensure_ascii=False)
         print(f"   🔧 [{c['agente']}] {c['ferramenta']}({args[:largura]})")
         print(f"   {'❌' if c['erro'] else '📡'} {c['resultado'].replace(chr(10), ' ')[:largura]}")
+    mostrar_vereditos(len(r["consultas"]))
     if r["estourou_limite"]:
         print("   ⛔ passou do limite de passos")
     if r["erro"]:
@@ -278,7 +299,8 @@ def mostrar(r, largura=220):
     gpu = f" · GPU {r['gpu_medio']}% / {r['gpu_mem_max_gb']} GB" if r["gpu_medio"] is not None else ""
     print(f"⏱ {r['segundos']} s · {r['chamadas_modelo']} chamadas ao modelo · {r['chamadas_ferramenta']} ferramentas "
           f"({r['erros_ferramenta']} com erro) · tokens {r['tokens_entrada']} → {r['tokens_saida']} · "
-          f"CPU {r['cpu_medio']}% · RAM {r['ram_max_gb']} GB{gpu}")
+          f"CPU {r['cpu_medio']}% · RAM {r['ram_max_gb']} GB{gpu}"
+          + (f" · {r['devolucoes']} devolução(ões) do verificador" if r.get("devolucoes") is not None else ""))
 
 
 __all__ = ["Servidor", "Sistema", "modelo", "aquecer", "chamar", "no_ferramentas", "medicao", "texto",

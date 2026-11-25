@@ -147,6 +147,11 @@ async def validar():
                             str(d["resultados"][:3])))
         await ok("buscar_entidade", "homônimos são sinalizados", "buscar_entidade", {"nome": "Marcelo", "tipo": "anfitriao"},
                  lambda d: ("homonimos" in d, d.get("homonimos", "sem aviso de homônimos")))
+        await ok("buscar_entidade", "anfitrião mostra os anúncios no Airbnb inteiro e em São Paulo", "buscar_entidade",
+                 {"nome": "Seazone", "tipo": "anfitriao"},
+                 lambda d: (d["resultados"][0]["anuncios_no_airbnb_inteiro"] == 3435
+                            and d["resultados"][0]["anuncios_em_sao_paulo"] == 209 and "observacao" in d,
+                            str(d["resultados"][:1])))
         await ok("buscar_entidade", "item inexistente: vazio, sem erro", "buscar_entidade",
                  {"nome": "Pousada Potiguar Imaginária", "tipo": "anuncio"},
                  lambda d: (d["encontrados"] == 0 and "mensagem" in d, d.get("mensagem", "")))
@@ -179,6 +184,8 @@ async def validar():
                     {"consulta": "SELECT * FROM anuncios"}, ["listing"])
         await falha("erro", "SQL: coluna inexistente lista as colunas", "consultar_sql",
                     {"consulta": "SELECT rating FROM listing"}, ["coluna inexistente", "review_scores_rating"])
+        await falha("erro", "SQL: repetir a consulta que acabou de falhar é recusado", "consultar_sql",
+                    {"consulta": "SELECT  rating FROM listing;"}, ["idêntica", "coluna"])
         await falha("erro", "SQL: id com tipo errado", "consultar_sql",
                     {"consulta": "SELECT name FROM listing WHERE listing_id = 'Noren'"}, ["inteiros"])
         await falha("erro", "SQL: sintaxe", "consultar_sql", {"consulta": "SELECT name FROM listing WHERE"}, ["sintaxe"])

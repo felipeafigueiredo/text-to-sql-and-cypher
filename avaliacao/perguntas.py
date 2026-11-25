@@ -304,7 +304,7 @@ def _(db):
 # ─── Especiais ───────────────────────────────────────────────────────────────
 
 @pergunta("P18", "Quantos anúncios a Seazone tem?",
-          "capciosa", "sql", ["consultar_sql"])   # buscar_entidade dá só os anúncios em São Paulo
+          "capciosa", "sql", ["buscar_entidade|consultar_sql"])   # buscar_entidade mostra os dois números
 def _(db):
     anfitriao(db, SEAZONE)
     total = db.valor("SELECT listings_count FROM host WHERE host_id = %(h)s", h=SEAZONE)

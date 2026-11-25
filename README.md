@@ -27,13 +27,13 @@ O repositório não contém os dados: contém o script que gera o recorte a part
 |---|---|---|
 | tool | `consultar_sql` | SELECT somente leitura no PostgreSQL |
 | tool | `consultar_grafo` | Cypher somente leitura no Neo4j |
-| tool | `buscar_entidade` | acha anúncio, anfitrião, hóspede, bairro ou comodidade pelo nome (sem diferenciar acentos); sinaliza homônimos e inexistentes |
+| tool | `buscar_entidade` | acha anúncio, anfitrião, hóspede, bairro ou comodidade pelo nome (sem diferenciar acentos); sinaliza homônimos e inexistentes; para anfitriões, mostra os anúncios em São Paulo e no Airbnb inteiro |
 | tool | `detalhes_anuncio` | todos os dados de um anúncio |
 | tool | `comparar_anuncios` | compara de 2 a 5 anúncios e calcula o vencedor de cada critério |
 | resource | `esquema://sql`, `esquema://grafo` | esquemas e cuidados de cada banco |
 | prompt | `analisar_bairro` | pede a análise de um bairro e a comparação com os vizinhos |
 
-Chamadas incorretas devolvem erro de execução (`isError`) com uma dica do que corrigir. A escrita é bloqueada na ferramenta e no próprio banco. A validação sem LLM (`servidor/validar.py`) está em [resultados/validacao_servidor.md](resultados/validacao_servidor.md).
+Chamadas incorretas devolvem erro de execução (`isError`) com uma dica do que corrigir; reenviar sem mudança a consulta que acabou de falhar é recusado, com o pedido de reescrevê-la. A escrita é bloqueada na ferramenta e no próprio banco. A validação sem LLM (`servidor/validar.py`) está em [resultados/validacao_servidor.md](resultados/validacao_servidor.md).
 
 ## Como executar
 
@@ -50,7 +50,7 @@ Leva cerca de 30 segundos e grava 8 arquivos CSV (148 MB). Suba-os para uma past
 
 **2. Preparar o ambiente e validar o servidor.** Abra [notebooks/01_preparacao_e_servidor.ipynb](notebooks/01_preparacao_e_servidor.ipynb) no Colab (*Arquivo → Abrir notebook → GitHub*), mantenha o runtime padrão (só CPU), ajuste `DRIVE_DIR` na primeira célula e rode tudo.
 
-**3. Os agentes.** Abra [notebooks/02_agentes.ipynb](notebooks/02_agentes.ipynb) com o runtime **T4 GPU**, ajuste `DRIVE_DIR` e rode tudo. A primeira célula prepara a sessão sozinha (`ambiente/preparar.py`, cerca de 10 minutos) e as seguintes mostram os agentes respondendo, com o trace de cada consulta.
+**3. Os agentes.** Abra [notebooks/02_agentes.ipynb](notebooks/02_agentes.ipynb) com o runtime **T4 GPU**, ajuste `DRIVE_DIR` e rode tudo. A primeira célula prepara a sessão sozinha (`ambiente/preparar.py`, cerca de 10 minutos) e as seguintes mostram os três sistemas (agente único, roteamento e verificador) respondendo as mesmas perguntas, com o trace de cada consulta e a checagem contra o gabarito.
 
 ## Avaliação
 

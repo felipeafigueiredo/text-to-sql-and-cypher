@@ -182,7 +182,8 @@ def erro_sql(e: psycopg.Error) -> ToolError:
     if isinstance(e, psycopg.errors.UndefinedTable):
         dica = f"Tabela inexistente. As tabelas são: {tabelas}. Os nomes estão em inglês e no singular."
     elif isinstance(e, psycopg.errors.UndefinedColumn):
-        dica = f"Coluna inexistente. As colunas de cada tabela são: {tabelas}."
+        dica = (f"Coluna inexistente. As colunas de cada tabela são: {tabelas}. Um apelido criado com AS não vale no "
+                "WHERE nem no GROUP BY da mesma SELECT, e as colunas de uma CTE só existem nas consultas que a põem no FROM.")
     elif isinstance(e, psycopg.errors.QueryCanceled):
         dica = (f"A consulta passou de {TIMEOUT_S} s e foi cancelada. Evite produtos cartesianos (junções sem condição), "
                 "filtre antes de juntar e use LIMIT.")
@@ -226,6 +227,28 @@ def avisos_cypher(consulta):
     return avisos
 
 
+_ultima_falha = {}                    # ferramenta -> (consulta normalizada, primeira linha do erro)
+
+
+def sem_repeticao(ferramenta, q, executar):
+    """Executa a consulta e recusa reenviar, sem mudar nada, a mesma consulta que acabou de falhar: ela daria o
+    mesmo erro. Modelos pequenos às vezes repetem a consulta errada até o limite de passos, ignorando a dica."""
+    chave = " ".join(q.split())
+    anterior = _ultima_falha.get(ferramenta)
+    if chave and anterior and anterior[0] == chave:
+        raise ToolError(f"Esta consulta é idêntica à anterior, que falhou com: {anterior[1]}\n"
+                        "Enviar de novo dá o mesmo erro. Reescreva a consulta corrigindo o erro conforme a dica "
+                        "(confira cada tabela, coluna e apelido contra o esquema) ou use outra ferramenta.")
+    try:
+        r = executar(q)
+    except ToolError as e:
+        if chave:
+            _ultima_falha[ferramenta] = (chave, str(e).splitlines()[0])
+        raise
+    _ultima_falha.pop(ferramenta, None)
+    return r
+
+
 def id_valido(valor, nome):
     """Ids do Airbnb são inteiros positivos (até 19 dígitos)."""
     try:
@@ -247,7 +270,10 @@ def consultar_sql(
     """Executa uma consulta SQL de leitura no PostgreSQL: anúncios, preços, notas, comodidades, anfitriões, bairros,
     avaliações e hóspedes. Use para filtros, contagens, médias, rankings e junções. Devolve no máximo 50 linhas,
     com o total de linhas e se o resultado foi truncado. O esquema está no resource esquema://sql."""
-    q = (consulta or "").strip().rstrip(";").strip()
+    return sem_repeticao("sql", (consulta or "").strip().rstrip(";").strip(), _consultar_sql)
+
+
+def _consultar_sql(q):
     if not q:
         raise ToolError("A consulta está vazia. Envie um comando SELECT.")
     if ";" in re.sub(r"'[^']*'", "''", q):
@@ -279,7 +305,10 @@ def consultar_grafo(
     (LOCATED_IN), hóspedes que avaliaram cada anúncio (REVIEWED) e bairros vizinhos (BORDERS). Use para vizinhos,
     hóspedes em comum, caminhos e conexões. O grafo não tem preços nem notas. Devolve no máximo 50 linhas, com o
     total e se o resultado foi truncado. O esquema está no resource esquema://grafo."""
-    q = (consulta or "").strip().rstrip(";").strip()
+    return sem_repeticao("grafo", (consulta or "").strip().rstrip(";").strip(), _consultar_grafo)
+
+
+def _consultar_grafo(q):
     if not q:
         raise ToolError("A consulta está vazia. Envie uma consulta Cypher MATCH ... RETURN.")
     sem_texto = re.sub(r"'[^']*'|\"[^\"]*\"", "''", q)
@@ -326,7 +355,8 @@ BUSCAS = {
                 "SELECT name FROM (SELECT DISTINCT name FROM listing WHERE similarity(name, %(t)s) > 0.3) n "
                 "ORDER BY similarity(name, %(t)s) DESC LIMIT 5"),
     "anfitriao": ("anfitrião",
-                  "SELECT h.host_id, h.name, h.is_superhost, count(l.listing_id) AS anuncios_em_sao_paulo "
+                  "SELECT h.host_id, h.name, h.is_superhost, h.listings_count AS anuncios_no_airbnb_inteiro, "
+                  "count(l.listing_id) AS anuncios_em_sao_paulo "
                   "FROM host h JOIN listing l USING (host_id) WHERE unaccent(h.name) ILIKE unaccent(%(p)s) "
                   "GROUP BY h.host_id ORDER BY lower(h.name) = lower(%(t)s) DESC, count(l.listing_id) DESC LIMIT 10",
                   "SELECT count(*) AS n FROM host WHERE unaccent(name) ILIKE unaccent(%(p)s)",
@@ -394,6 +424,9 @@ def buscar_entidade(
         r["homonimos"] = (f"Há {len(iguais)} {rotulo}s chamados exatamente '{termo}'"
                           + (" (talvez mais, além dos 10 devolvidos)" if total > len(achados) else "")
                           + ". Use o id para escolher; os outros campos ajudam a diferenciar.")
+    if tipo == "anfitriao":
+        r["observacao"] = ("anuncios_no_airbnb_inteiro conta os anúncios do anfitrião em todas as cidades; "
+                           "anuncios_em_sao_paulo conta só os deste banco.")
     return r
 
 
