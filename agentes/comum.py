@@ -133,6 +133,7 @@ class Medicao:
 
     def __init__(self):
         self.modelo, self.ferramentas = [], []
+        self.rota = None                   # o banco escolhido pelo roteador (sistema 2); None nos outros sistemas
 
     def registrar_modelo(self, msg, agente, segundos):
         uso = getattr(msg, "usage_metadata", None) or {}
@@ -243,7 +244,7 @@ class Sistema:
             except Exception as e:                       # uma falha numa pergunta não derruba as outras 59
                 erro = f"{type(e).__name__}: {e}"
         return dict(
-            sistema=self.nome, pergunta=pergunta, resposta=limpar(resposta),
+            sistema=self.nome, pergunta=pergunta, resposta=limpar(resposta), rota=m.rota,
             ferramentas=[f["ferramenta"] for f in m.ferramentas],
             chamadas_modelo=len(m.modelo), chamadas_ferramenta=len(m.ferramentas),
             erros_ferramenta=sum(f["erro"] for f in m.ferramentas),
@@ -263,6 +264,8 @@ def resposta_final(mensagens):
 def mostrar(r, largura=220):
     """O trace de uma execução: cada consulta, o resultado resumido e a resposta."""
     print(f"👤 {r['pergunta']}\n")
+    if r.get("rota"):
+        print(f"   🧭 roteador → {r['rota']}")
     for c in r["consultas"]:
         args = json.dumps(c["argumentos"], ensure_ascii=False)
         print(f"   🔧 [{c['agente']}] {c['ferramenta']}({args[:largura]})")
