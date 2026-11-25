@@ -10,7 +10,7 @@ set -euo pipefail
 
 NEO4J_VERSAO="5.26.0"
 NEO4J_HOME="/opt/neo4j-server"          # fora de /content: uma pasta "neo4j" ali esconderia a biblioteca Python
-NEO4J_SENHA="${YELP_NEO4J_SENHA:-yelp-santa-barbara}"
+NEO4J_SENHA="${AIRBNB_NEO4J_SENHA:-airbnb-sao-paulo}"
 PG_SENHA_ADMIN="postgres"
 export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
 RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
@@ -49,6 +49,9 @@ parte_bancos() {
     fi
     mkdir -p "$NEO4J_HOME"
     tar -xzf "/tmp/$tar" -C "$NEO4J_HOME" --strip-components=1
+    # memória fixa: sem isso a JVM pega 1/4 da RAM e o page cache metade do resto, e falta RAM para o Ollama
+    printf '\nserver.memory.heap.initial_size=1g\nserver.memory.heap.max_size=2g\nserver.memory.pagecache.size=1g\n' \
+      >> "$NEO4J_HOME/conf/neo4j.conf"
     "$NEO4J_HOME/bin/neo4j-admin" dbms set-initial-password "$NEO4J_SENHA" > /dev/null
   fi
   if ! (echo > /dev/tcp/127.0.0.1/7687) 2>/dev/null; then

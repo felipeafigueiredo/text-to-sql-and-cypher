@@ -1,0 +1,3 @@
+# Só para gerar o recorte (dados/recorte.py), uma vez, na sua máquina. A carga usa as bibliotecas de agentes/requirements.txt.
+pandas>=2.2
+shapely>=2.0

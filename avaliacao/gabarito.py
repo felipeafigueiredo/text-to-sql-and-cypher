@@ -2,7 +2,7 @@
 
 Uso na linha de comando (imprime as perguntas com o gabarito):
     python avaliacao/gabarito.py
-Usa as mesmas variáveis de ambiente do servidor: YELP_PG_DSN, YELP_NEO4J_URI, YELP_NEO4J_SENHA.
+Usa as mesmas variáveis de ambiente do servidor: AIRBNB_PG_DSN, AIRBNB_NEO4J_URI, AIRBNB_NEO4J_SENHA.
 """
 import os
 import re

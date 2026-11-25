@@ -1,6 +1,6 @@
 # text-to-sql-and-cypher
 
-Perguntas em linguagem natural sobre dados do Yelp de Santa Barbara (CA), respondidas por agentes de LLM que consultam um banco relacional (**PostgreSQL**, em SQL) e um banco de grafos (**Neo4j**, em Cypher) por meio de um **servidor MCP**. O projeto compara, com medições, um agente único e duas arquiteturas multiagente.
+Perguntas em linguagem natural sobre os anúncios do Airbnb em São Paulo, respondidas por agentes de LLM que consultam um banco relacional (**PostgreSQL**, em SQL) e um banco de grafos (**Neo4j**, em Cypher) por meio de um **servidor MCP**. O projeto compara, com medições, um agente único e duas arquiteturas multiagente.
 
 Trabalho 2 de DCA0305 (Projeto de sistemas baseados em aprendizado de máquina), UFRN.
 
@@ -8,14 +8,16 @@ Trabalho 2 de DCA0305 (Projeto de sistemas baseados em aprendizado de máquina),
 
 ## Dados
 
-[Yelp Open Dataset](https://www.yelp.com/dataset). Os termos de uso do Yelp não permitem redistribuir os dados, então **este repositório não contém dados**: contém o script que gera o recorte a partir do download oficial.
+[Inside Airbnb](https://insideairbnb.com/get-the-data/), São Paulo, coleta de setembro de 2026: anúncios (`listings.csv.gz`, versão detalhada), avaliações (`reviews.csv.gz`) e os polígonos dos distritos (`neighbourhoods.geojson`). O recorte usa todos os anúncios da cidade e as avaliações de 2025 em diante, sem o texto.
 
 | Banco | Conteúdo |
 |---|---|
-| PostgreSQL | `business` (3.834), `business_category` (18.194), `users` (130.392), `review` (269.703, sem o texto) |
-| Neo4j | nós `User` e `Business`; relações `FRIEND` (377.374) e `REVIEWED` (262.936) |
+| PostgreSQL | `neighbourhood` (96), `host` (15.883), `listing` (44.080), `listing_amenity` (1.251.474), `guest` (651.156), `review` (933.607) |
+| Neo4j | nós `Host`, `Listing`, `Guest` e `Neighbourhood`; relações `HOSTS` (44.080), `LOCATED_IN` (44.080), `REVIEWED` (899.238) e `BORDERS` (235) |
 
-Cada fato mora em um banco só; os dois compartilham as chaves `user_id` e `business_id`.
+Preços, notas, comodidades e datas ficam só no PostgreSQL. A vizinhança entre bairros (`BORDERS`, calculada dos polígonos) fica só no Neo4j. Os dois bancos compartilham as chaves `listing_id`, `host_id`, `guest_id` e o nome do bairro.
+
+O repositório não contém os dados: contém o script que gera o recorte a partir dos arquivos baixados.
 
 ## Servidor MCP
 
@@ -25,11 +27,11 @@ Cada fato mora em um banco só; os dois compartilham as chaves `user_id` e `busi
 |---|---|---|
 | tool | `consultar_sql` | SELECT somente leitura no PostgreSQL |
 | tool | `consultar_grafo` | Cypher somente leitura no Neo4j |
-| tool | `buscar_entidade` | acha negócio, usuário ou categoria pelo nome; sinaliza homônimos e inexistentes |
-| tool | `detalhes_negocio` | todos os dados de um negócio |
-| tool | `comparar_negocios` | compara de 2 a 5 negócios e calcula o vencedor de cada critério |
+| tool | `buscar_entidade` | acha anúncio, anfitrião, hóspede, bairro ou comodidade pelo nome (sem diferenciar acentos); sinaliza homônimos e inexistentes |
+| tool | `detalhes_anuncio` | todos os dados de um anúncio |
+| tool | `comparar_anuncios` | compara de 2 a 5 anúncios e calcula o vencedor de cada critério |
 | resource | `esquema://sql`, `esquema://grafo` | esquemas e cuidados de cada banco |
-| prompt | `analisar_negocio` | pede a análise de um negócio pelo nome |
+| prompt | `analisar_bairro` | pede a análise de um bairro e a comparação com os vizinhos |
 
 Chamadas incorretas devolvem erro de execução (`isError`) com uma dica do que corrigir. A escrita é bloqueada na ferramenta e no próprio banco. A validação sem LLM (`servidor/validar.py`) está em [resultados/validacao_servidor.md](resultados/validacao_servidor.md).
 
@@ -37,17 +39,18 @@ Chamadas incorretas devolvem erro de execução (`isError`) com uma dica do que 
 
 Tudo roda no **Google Colab**, sem Docker. Só os notebooks que usam o modelo precisam de GPU T4.
 
-**1. Gerar o recorte (uma vez, na sua máquina).** Baixe o dataset em yelp.com/dataset e rode:
+**1. Gerar o recorte (uma vez, na sua máquina).** Em insideairbnb.com/get-the-data, na seção de São Paulo, baixe `listings.csv.gz`, `reviews.csv.gz` e `neighbourhoods.geojson` para uma mesma pasta e rode:
 
 ```bash
-python dados/recorte.py "<pasta com os yelp_academic_dataset_*.json>" dados/recorte
+pip install -r dados/requirements.txt
+python dados/recorte.py "<pasta com os 3 arquivos>" dados/recorte
 ```
 
-Leva cerca de 1 minuto e grava 6 arquivos CSV (66 MB). Suba-os para uma pasta do seu Google Drive.
+Leva cerca de 30 segundos e grava 8 arquivos CSV (148 MB). Suba-os para uma pasta do seu Google Drive.
 
 **2. Preparar o ambiente e validar o servidor.** Abra [notebooks/01_preparacao_e_servidor.ipynb](notebooks/01_preparacao_e_servidor.ipynb) no Colab (*Arquivo → Abrir notebook → GitHub*), mantenha o runtime padrão (só CPU), ajuste `DRIVE_DIR` na primeira célula e rode tudo.
 
-**3. Os agentes.** Abra [notebooks/02_agentes.ipynb](notebooks/02_agentes.ipynb) com o runtime **T4 GPU**, ajuste `DRIVE_DIR` e rode tudo. A primeira célula prepara a sessão sozinha (`ambiente/preparar.py`, cerca de 8 minutos) e as seguintes mostram os agentes respondendo, com o trace de cada consulta.
+**3. Os agentes.** Abra [notebooks/02_agentes.ipynb](notebooks/02_agentes.ipynb) com o runtime **T4 GPU**, ajuste `DRIVE_DIR` e rode tudo. A primeira célula prepara a sessão sozinha (`ambiente/preparar.py`, cerca de 10 minutos) e as seguintes mostram os agentes respondendo, com o trace de cada consulta.
 
 ## Avaliação
 

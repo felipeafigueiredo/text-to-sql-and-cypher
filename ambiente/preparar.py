@@ -3,7 +3,7 @@
 Os notebooks 02 e 03 rodam cada um na sua máquina do Colab e chamam isto em vez de copiar células:
 
     from ambiente.preparar import preparar
-    TEMPOS = preparar("/content/drive/MyDrive/yelp_recorte")
+    TEMPOS = preparar("/content/drive/MyDrive/airbnb_recorte")
 
 Cada etapa confere o que já existe e só faz o que falta: rodar de novo na mesma sessão leva segundos.
 Só usa a biblioteca padrão, porque roda antes de as bibliotecas dos agentes estarem instaladas.
@@ -15,14 +15,15 @@ import sys
 import time
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ARQUIVOS = ["business.csv", "business_category.csv", "users.csv", "review.csv", "friends.csv", "reviewed.csv"]
+ARQUIVOS = ["neighbourhood.csv", "host.csv", "listing.csv", "listing_amenity.csv", "guest.csv", "review.csv",
+            "reviewed.csv", "borders.csv"]
 DADOS = "/content/recorte"
 AMBIENTE = {
-    "YELP_PG_DSN": "host=localhost port=5432 dbname=yelp user=leitor password=leitor",
-    "YELP_NEO4J_URI": "bolt://localhost:7687",
-    "YELP_NEO4J_USUARIO": "neo4j",
-    "YELP_NEO4J_SENHA": "yelp-santa-barbara",
-    "YELP_SERVIDOR_LIBS": os.path.join(RAIZ, "servidor_libs"),
+    "AIRBNB_PG_DSN": "host=localhost port=5432 dbname=airbnb user=leitor password=leitor",
+    "AIRBNB_NEO4J_URI": "bolt://localhost:7687",
+    "AIRBNB_NEO4J_USUARIO": "neo4j",
+    "AIRBNB_NEO4J_SENHA": "airbnb-sao-paulo",
+    "AIRBNB_SERVIDOR_LIBS": os.path.join(RAIZ, "servidor_libs"),
 }
 
 
@@ -45,11 +46,11 @@ def bancos_carregados():
     try:
         import psycopg
         from neo4j import GraphDatabase
-        with psycopg.connect(AMBIENTE["YELP_PG_DSN"], connect_timeout=3) as c:
-            if c.execute("SELECT count(*) FROM business").fetchone()[0] != 3834:
+        with psycopg.connect(AMBIENTE["AIRBNB_PG_DSN"], connect_timeout=3) as c:
+            if c.execute("SELECT count(*) FROM review").fetchone()[0] != 933607:
                 return False
-        with GraphDatabase.driver(AMBIENTE["YELP_NEO4J_URI"], auth=("neo4j", AMBIENTE["YELP_NEO4J_SENHA"])) as d:
-            return d.execute_query("MATCH ()-[r:FRIEND]->() RETURN count(r) AS n").records[0]["n"] == 377374
+        with GraphDatabase.driver(AMBIENTE["AIRBNB_NEO4J_URI"], auth=("neo4j", AMBIENTE["AIRBNB_NEO4J_SENHA"])) as d:
+            return d.execute_query("MATCH ()-[r:REVIEWED]->() RETURN count(r) AS n").records[0]["n"] == 899238
     except Exception:
         return False
 
@@ -94,6 +95,6 @@ def preparar(drive_dir, modelo="qwen3:8b", com_modelo=True):
         etapa("Ollama e o modelo", f"bash ambiente/instalar_colab.sh ollama {modelo}", tempos)
 
     os.environ.update(AMBIENTE)
-    os.environ["YELP_MODELO"] = modelo
+    os.environ["AIRBNB_MODELO"] = modelo
     print(f"\n🚀 sessão pronta em {round(sum(tempos.values()))} s")
     return tempos

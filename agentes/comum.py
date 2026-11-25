@@ -25,7 +25,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODELO = os.environ.get("YELP_MODELO", "qwen3:8b")
+MODELO = os.environ.get("AIRBNB_MODELO", "qwen3:8b")
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 NUM_CTX = 16384          # dois esquemas + 5 ferramentas + resultados de até 50 linhas: 8192 estoura em poucas voltas
 LIMITE_PASSOS = 30       # passos do LangGraph por pergunta (~14 voltas modelo ⇄ ferramentas)
@@ -50,13 +50,13 @@ class Servidor:
     LOG = os.path.join(tempfile.gettempdir(), "servidor_mcp.log")
 
     def __init__(self, python=None, libs=None):
-        self.python = python or os.environ.get("YELP_SERVIDOR_PYTHON", sys.executable)
-        self.libs = libs if libs is not None else os.environ.get("YELP_SERVIDOR_LIBS", os.path.join(RAIZ, "servidor_libs"))
+        self.python = python or os.environ.get("AIRBNB_SERVIDOR_PYTHON", sys.executable)
+        self.libs = libs if libs is not None else os.environ.get("AIRBNB_SERVIDOR_LIBS", os.path.join(RAIZ, "servidor_libs"))
         self.ferramentas, self.esquemas = [], {}
         self._pronto, self._fim, self._tarefa = asyncio.Event(), asyncio.Event(), None
 
     def conexao(self):
-        env = {k: v for k, v in os.environ.items() if k.startswith("YELP_")}
+        env = {k: v for k, v in os.environ.items() if k.startswith("AIRBNB_")}
         if self.libs:
             env["PYTHONPATH"] = self.libs
         # sem log do servidor na tela: o erro de cada ferramenta já volta ao modelo e fica na medição

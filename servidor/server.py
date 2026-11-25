@@ -1,21 +1,21 @@
-"""Servidor MCP do projeto: dados do Yelp de Santa Barbara em dois bancos.
+"""Servidor MCP do projeto: anúncios do Airbnb em São Paulo (Inside Airbnb) em dois bancos.
 
-- PostgreSQL: atributos, números e categorias (negócios, avaliações, usuários).
-- Neo4j: relações (amizades entre usuários e quem avaliou qual negócio).
+- PostgreSQL: atributos, números e comodidades (anúncios, anfitriões, bairros, avaliações, hóspedes).
+- Neo4j: relações (quem anuncia o quê, onde fica cada anúncio, quem se hospedou onde, bairros vizinhos).
 
 Ferramentas (o modelo decide quando chamar):
     consultar_sql       SELECT somente leitura no PostgreSQL
     consultar_grafo     consulta Cypher somente leitura no Neo4j
-    buscar_entidade     acha negócio, usuário ou categoria pelo nome (resolve homônimos e inexistentes)
-    detalhes_negocio    todos os dados de um negócio
-    comparar_negocios   compara negócios e calcula o melhor em cada critério   <- ferramenta de cálculo
+    buscar_entidade     acha anúncio, anfitrião, hóspede, bairro ou comodidade pelo nome (resolve homônimos e inexistentes)
+    detalhes_anuncio    todos os dados de um anúncio
+    comparar_anuncios   compara anúncios e calcula o melhor em cada critério   <- ferramenta de cálculo
 Resources (a aplicação lê):  esquema://sql, esquema://grafo
-Prompt (o usuário escolhe):  analisar_negocio
+Prompt (o usuário escolhe):  analisar_bairro
 
 Toda chamada errada devolve um erro de execução (isError) com uma mensagem que diz o que corrigir,
 para o modelo tentar de novo dentro do loop. Resultado vazio não é erro.
 
-Configuração por variáveis de ambiente: YELP_PG_DSN, YELP_NEO4J_URI, YELP_NEO4J_USUARIO, YELP_NEO4J_SENHA.
+Configuração por variáveis de ambiente: AIRBNB_PG_DSN, AIRBNB_NEO4J_URI, AIRBNB_NEO4J_USUARIO, AIRBNB_NEO4J_SENHA.
 Roda pelo transporte stdio:  python servidor/server.py
 """
 import datetime
@@ -33,66 +33,91 @@ from pydantic import Field
 
 MAX_LINHAS = 50                       # teto de linhas devolvidas ao modelo por consulta
 TIMEOUT_S = 15                        # teto de tempo por consulta (o PostgreSQL também impõe pelo usuário leitor)
-PG_DSN = os.environ.get("YELP_PG_DSN", "host=localhost port=5432 dbname=yelp user=leitor password=leitor")
-NEO4J_URI = os.environ.get("YELP_NEO4J_URI", "bolt://localhost:7687")
-NEO4J_AUTH = (os.environ.get("YELP_NEO4J_USUARIO", "neo4j"), os.environ.get("YELP_NEO4J_SENHA", "yelp-santa-barbara"))
+PG_DSN = os.environ.get("AIRBNB_PG_DSN", "host=localhost port=5432 dbname=airbnb user=leitor password=leitor")
+NEO4J_URI = os.environ.get("AIRBNB_NEO4J_URI", "bolt://localhost:7687")
+NEO4J_AUTH = (os.environ.get("AIRBNB_NEO4J_USUARIO", "neo4j"), os.environ.get("AIRBNB_NEO4J_SENHA", "airbnb-sao-paulo"))
 
-ID_YELP = re.compile(r"^[A-Za-z0-9_-]{22}$")
+NOTAS = ["rating", "accuracy", "cleanliness", "checkin", "communication", "location", "value"]
 TABELAS_SQL = {
-    "business": "business_id, name, address, postal_code, latitude, longitude, stars, review_count, is_open, price_range, checkin_count",
-    "business_category": "business_id, category",
-    "review": "review_id, user_id, business_id, stars, date, useful, funny, cool",
-    "users": "user_id, name, review_count, yelping_since, useful, funny, cool, fans, average_stars",
+    "neighbourhood": "name, group_name",
+    "host": "host_id, name, is_superhost, identity_verified, listings_count",
+    "listing": "listing_id, host_id, neighbourhood, name, latitude, longitude, property_type, room_type, accommodates, "
+               "bedrooms, beds, bathrooms, price, minimum_nights, availability_365, number_of_reviews, first_review, "
+               "last_review, " + ", ".join(f"review_scores_{n}" for n in NOTAS) +
+               ", estimated_occupancy_l365d, estimated_revenue_l365d",
+    "listing_amenity": "listing_id, amenity",
+    "guest": "guest_id, name",
+    "review": "review_id, listing_id, guest_id, date",
 }
-ROTULOS_GRAFO = {"User", "Business"}
-RELACOES_GRAFO = {"FRIEND", "REVIEWED"}
-PROPRIEDADES_GRAFO = {"user_id", "business_id", "name"}
+ROTULOS_GRAFO = {"Host", "Listing", "Guest", "Neighbourhood"}
+RELACOES_GRAFO = {"HOSTS", "LOCATED_IN", "REVIEWED", "BORDERS"}
+PROPRIEDADES_GRAFO = {"host_id", "listing_id", "guest_id", "name"}
 
-ESQUEMA_SQL = """BANCO RELACIONAL (PostgreSQL) — ferramenta consultar_sql. Cidade única: Santa Barbara, CA.
+ESQUEMA_SQL = """BANCO RELACIONAL (PostgreSQL) — ferramenta consultar_sql. Cidade única: São Paulo, coleta de setembro de 2026.
 
-business(business_id, name, address, postal_code, latitude, longitude, stars, review_count, is_open, price_range, checkin_count)
-  stars: nota média do negócio no Yelp, de 1.0 a 5.0 (passos de 0.5)
-  review_count: número de avaliações do negócio no Yelp inteiro
-  is_open: 1 aberto, 0 fechado
-  price_range: faixa de preço de 1 (barato) a 4 (caro); NULO em cerca de metade dos negócios
-  checkin_count: número de check-ins registrados
-  Há negócios com o mesmo nome (redes); o business_id os distingue.
+neighbourhood(name, group_name)
+  96 distritos. name SEM ACENTO, como no dado original: 'Republica', 'Bras', 'Butanta', 'Se', 'Jardim Paulista'.
+  Para comparar com o que o usuário escreveu, use unaccent(): WHERE unaccent(name) ILIKE unaccent('Brás').
+  group_name: agrupamento de distritos (subprefeitura), ex.: 'Pinheiros', 'Se', 'Vila Mariana'.
 
-business_category(business_id, category)
-  Um negócio tem várias categorias. Valores em inglês: 'Restaurants', 'Mexican', 'Coffee & Tea', 'Bars'...
-  Juntar com business pode repetir o negócio quando o filtro casa mais de uma categoria: use COUNT(DISTINCT ...).
+host(host_id, name, is_superhost, identity_verified, listings_count)
+  name: só o primeiro nome (ou o nome da empresa); há muitos homônimos.
+  ATENÇÃO: listings_count conta os anúncios do anfitrião no Airbnb INTEIRO (todas as cidades).
+  Para anúncios em São Paulo, conte na tabela listing: SELECT count(*) FROM listing WHERE host_id = ...
 
-review(review_id, user_id, business_id, stars, date, useful, funny, cool)
-  Uma linha por avaliação feita em Santa Barbara. stars: nota da avaliação, inteiro de 1 a 5.
-  O mesmo usuário pode avaliar o mesmo negócio mais de uma vez.
+listing(listing_id, host_id, neighbourhood, name, latitude, longitude, property_type, room_type, accommodates,
+        bedrooms, beds, bathrooms, price, minimum_nights, availability_365, number_of_reviews, first_review, last_review,
+        review_scores_rating, review_scores_accuracy, review_scores_cleanliness, review_scores_checkin,
+        review_scores_communication, review_scores_location, review_scores_value,
+        estimated_occupancy_l365d, estimated_revenue_l365d)
+  Um anúncio por linha; o nome (name) NÃO é único. neighbourhood é o name da tabela neighbourhood.
+  room_type: 'Entire home/apt', 'Private room', 'Shared room', 'Hotel room'. property_type em inglês ('Entire rental unit'...).
+  price: R$ por noite; NULO em ~3,5% dos anúncios. accommodates: capacidade máxima de hóspedes.
+  review_scores_*: notas de 0 a 5 dadas pelos hóspedes; NULAS nos anúncios sem avaliação.
+  ATENÇÃO: number_of_reviews conta as avaliações da vida toda do anúncio (desde 2011);
+  a tabela review só tem as de 2025 em diante.
+  estimated_occupancy_l365d: noites ocupadas estimadas no último ano; estimated_revenue_l365d: receita estimada em R$.
 
-users(user_id, name, review_count, yelping_since, useful, funny, cool, fans, average_stars)
-  name: só o primeiro nome; há muitos homônimos.
-  ATENÇÃO: review_count e average_stars contam o Yelp INTEIRO, não só Santa Barbara.
-  Para avaliações em Santa Barbara, conte ou faça a média na tabela review.
+listing_amenity(listing_id, amenity)
+  Comodidades de cada anúncio, em inglês: 'Wifi', 'Kitchen', 'Pool', 'Air conditioning', 'Gym', 'Pets allowed'...
+  Só as presentes em pelo menos 1% dos anúncios.
 
-Chaves compartilhadas com o grafo: user_id e business_id.
-Amizades NÃO estão no SQL: estão no grafo."""
+guest(guest_id, name)
+  Hóspedes que avaliaram algum anúncio de 2025 em diante. name: só o primeiro nome; há muitos homônimos.
 
-ESQUEMA_GRAFO = """BANCO DE GRAFO (Neo4j) — ferramenta consultar_grafo. Cidade única: Santa Barbara, CA.
+review(review_id, listing_id, guest_id, date)
+  Uma linha por avaliação, de 2025-01-01 a 2026-09. A avaliação NÃO tem nota própria:
+  as notas estão em listing.review_scores_*. O mesmo hóspede pode avaliar o mesmo anúncio mais de uma vez.
+
+Os ids (listing_id, host_id, guest_id) são números inteiros grandes: escreva-os sem aspas.
+Chaves compartilhadas com o grafo: listing_id, host_id, guest_id e o nome do bairro.
+A vizinhança entre bairros NÃO está no SQL: está no grafo."""
+
+ESQUEMA_GRAFO = """BANCO DE GRAFO (Neo4j) — ferramenta consultar_grafo. Cidade única: São Paulo.
 
 Nós:
-  (:User {user_id, name})
-  (:Business {business_id, name})
+  (:Host {host_id, name})            anfitrião
+  (:Listing {listing_id, name})      anúncio
+  (:Guest {guest_id, name})          hóspede que avaliou algum anúncio de 2025 em diante
+  (:Neighbourhood {name})            bairro (distrito), sem acento: 'Republica', 'Bras', 'Pinheiros'
 Relações:
-  (:User)-[:FRIEND]-(:User)          amizade; consulte SEM direção: (a)-[:FRIEND]-(b)
-  (:User)-[:REVIEWED]->(:Business)   o usuário avaliou o negócio (uma relação por par, sem propriedades)
+  (:Host)-[:HOSTS]->(:Listing)                 o anfitrião anuncia o anúncio
+  (:Listing)-[:LOCATED_IN]->(:Neighbourhood)   o anúncio fica no bairro
+  (:Guest)-[:REVIEWED]->(:Listing)             o hóspede avaliou o anúncio (uma relação por par, sem propriedades)
+  (:Neighbourhood)-[:BORDERS]-(:Neighbourhood) bairros vizinhos; consulte SEM direção: (a)-[:BORDERS]-(b)
 
-O grafo NÃO tem notas, datas, categorias nem contagens: isso está no SQL.
+Os ids são números inteiros: {listing_id: 123}, sem aspas.
+O grafo NÃO tem preços, notas, datas, comodidades nem contagens: isso está no SQL.
 Para contar vizinhos, conte o nó do outro lado:
-  MATCH (u:User {user_id: '...'})-[:FRIEND]-(f:User) RETURN count(DISTINCT f)
+  MATCH (l:Listing {listing_id: 123})<-[:REVIEWED]-(g:Guest) RETURN count(DISTINCT g)
 Para contar, use count() na própria consulta: as listas devolvidas são cortadas em 50 linhas.
-Chaves compartilhadas com o SQL: user_id e business_id. Para uma pergunta que precisa dos dois bancos,
-consulte o grafo, pegue os ids e use-os no SQL (ou o contrário)."""
+Chaves compartilhadas com o SQL: listing_id, host_id, guest_id e o nome do bairro. Para uma pergunta que precisa
+dos dois bancos, consulte o grafo, pegue os ids e use-os no SQL (ou o contrário)."""
 
-mcp = FastMCP("yelp-santa-barbara", instructions=(
-    "Dados do Yelp de Santa Barbara, CA, em dois bancos: PostgreSQL (atributos, notas, categorias) e Neo4j "
-    "(amizades e quem avaliou o quê). Leia esquema://sql e esquema://grafo antes de escrever consultas."))
+mcp = FastMCP("airbnb-sao-paulo", instructions=(
+    "Anúncios do Airbnb em São Paulo (Inside Airbnb, setembro de 2026) em dois bancos: PostgreSQL (preços, notas, "
+    "comodidades, avaliações) e Neo4j (anfitriões, hóspedes em comum, bairros vizinhos). "
+    "Leia esquema://sql e esquema://grafo antes de escrever consultas."))
 
 
 # ─── acesso aos bancos ───
@@ -155,7 +180,7 @@ def erro_sql(e: psycopg.Error) -> ToolError:
     msg = str(e).strip().splitlines()[0]
     tabelas = "; ".join(f"{t}({c})" for t, c in TABELAS_SQL.items())
     if isinstance(e, psycopg.errors.UndefinedTable):
-        dica = f"Tabela inexistente. As tabelas são: {tabelas}. A de usuários se chama users, no plural."
+        dica = f"Tabela inexistente. As tabelas são: {tabelas}. Os nomes estão em inglês e no singular."
     elif isinstance(e, psycopg.errors.UndefinedColumn):
         dica = f"Coluna inexistente. As colunas de cada tabela são: {tabelas}."
     elif isinstance(e, psycopg.errors.QueryCanceled):
@@ -166,14 +191,17 @@ def erro_sql(e: psycopg.Error) -> ToolError:
     elif isinstance(e, psycopg.errors.SyntaxError):
         dica = "Erro de sintaxe SQL. Confira a consulta e envie de novo."
     elif isinstance(e, psycopg.errors.UndefinedFunction):
-        dica = "Função ou operador inexistente para esses tipos. Confira os tipos das colunas (ex.: stars é número)."
+        dica = ("Função ou operador inexistente para esses tipos. Confira os tipos das colunas: os ids são inteiros "
+                "(sem aspas), price e review_scores_* são números.")
+    elif isinstance(e, psycopg.errors.InvalidTextRepresentation):
+        dica = "Valor com tipo errado: os ids são inteiros (sem aspas) e as datas vão no formato 'AAAA-MM-DD'."
     else:
         dica = "Confira a consulta contra o esquema (resource esquema://sql) e tente de novo."
     return ToolError(f"Erro do PostgreSQL: {msg}\nDica: {dica}")
 
 
 def avisos_cypher(consulta):
-    """Rótulos, relações e propriedades que não existem no grafo: a consulta roda, mas volta vazia."""
+    """Rótulos, relações e propriedades que não existem no grafo, e ids entre aspas: a consulta roda, mas volta vazia."""
     sem_texto = re.sub(r"'[^']*'|\"[^\"]*\"", "''", consulta)
     rotulos = set(re.findall(r"\(\s*\w*\s*:\s*`?(\w+)", sem_texto))
     relacoes = set(re.findall(r"\[\s*\w*\s*:\s*`?(\w+)", sem_texto))
@@ -181,16 +209,33 @@ def avisos_cypher(consulta):
     props |= set(re.findall(r"[({,]\s*([A-Za-z_]\w*)\s*:\s*(?:''|\$|-?\d)", sem_texto))
     avisos = []
     if rotulos - ROTULOS_GRAFO:
-        avisos.append(f"Rótulo inexistente: {', '.join(sorted(rotulos - ROTULOS_GRAFO))}. Os rótulos são User e Business.")
+        avisos.append(f"Rótulo inexistente: {', '.join(sorted(rotulos - ROTULOS_GRAFO))}. "
+                      "Os rótulos são Host, Listing, Guest e Neighbourhood.")
     if relacoes - RELACOES_GRAFO:
-        avisos.append(f"Relação inexistente: {', '.join(sorted(relacoes - RELACOES_GRAFO))}. As relações são FRIEND e REVIEWED.")
+        avisos.append(f"Relação inexistente: {', '.join(sorted(relacoes - RELACOES_GRAFO))}. "
+                      "As relações são HOSTS, LOCATED_IN, REVIEWED e BORDERS.")
     if props - PROPRIEDADES_GRAFO:
         extra = sorted(props - PROPRIEDADES_GRAFO)
-        texto = f"Propriedade inexistente no grafo: {', '.join(extra)}. Os nós só têm user_id, business_id e name."
-        if {"stars", "date", "category", "review_count"} & set(extra):
-            texto += " Notas, datas, categorias e contagens estão no SQL (consultar_sql)."
+        texto = (f"Propriedade inexistente no grafo: {', '.join(extra)}. "
+                 "Os nós só têm host_id, listing_id, guest_id e name.")
+        if {"price", "date", "amenity", "review_scores_rating", "number_of_reviews", "room_type", "neighbourhood"} & set(extra):
+            texto += " Preços, notas, datas, tipos, comodidades e contagens estão no SQL (consultar_sql)."
         avisos.append(texto)
+    if re.search(r"_id\s*(?::|=|<>|IN)\s*\[?\s*''", sem_texto):
+        avisos.append("Id entre aspas: no grafo os ids são inteiros. Escreva {listing_id: 123}, sem aspas.")
     return avisos
+
+
+def id_valido(valor, nome):
+    """Ids do Airbnb são inteiros positivos (até 19 dígitos)."""
+    try:
+        i = int(str(valor).strip())
+    except (TypeError, ValueError):
+        raise ToolError(f"{nome} inválido: '{valor}'. Um {nome} é um número inteiro, ex.: 1234567. "
+                        "Para achar o id a partir do nome, use buscar_entidade.")
+    if i <= 0 or i >= 2**63:
+        raise ToolError(f"{nome} inválido: {valor}. Use o número inteiro devolvido por buscar_entidade.")
+    return i
 
 
 # ─── TOOLS ───
@@ -199,9 +244,9 @@ def avisos_cypher(consulta):
 def consultar_sql(
     consulta: Annotated[str, Field(description="Um único comando SELECT (ou WITH ... SELECT) em PostgreSQL")],
 ) -> dict:
-    """Executa uma consulta SQL de leitura no PostgreSQL: negócios, notas, categorias, avaliações e usuários.
-    Use para filtros, contagens, médias, rankings e junções. Devolve no máximo 50 linhas, com o total
-    de linhas e se o resultado foi truncado. O esquema está no resource esquema://sql."""
+    """Executa uma consulta SQL de leitura no PostgreSQL: anúncios, preços, notas, comodidades, anfitriões, bairros,
+    avaliações e hóspedes. Use para filtros, contagens, médias, rankings e junções. Devolve no máximo 50 linhas,
+    com o total de linhas e se o resultado foi truncado. O esquema está no resource esquema://sql."""
     q = (consulta or "").strip().rstrip(";").strip()
     if not q:
         raise ToolError("A consulta está vazia. Envie um comando SELECT.")
@@ -230,10 +275,10 @@ def consultar_sql(
 def consultar_grafo(
     consulta: Annotated[str, Field(description="Uma consulta Cypher de leitura (MATCH ... RETURN ...)")],
 ) -> dict:
-    """Executa uma consulta Cypher de leitura no Neo4j: amizades entre usuários (FRIEND) e quem avaliou
-    qual negócio (REVIEWED). Use para vizinhos, amigos de amigos, caminhos e conexões. O grafo não tem
-    notas nem categorias. Devolve no máximo 50 linhas, com o total e se o resultado foi truncado.
-    O esquema está no resource esquema://grafo."""
+    """Executa uma consulta Cypher de leitura no Neo4j: anfitriões e seus anúncios (HOSTS), o bairro de cada anúncio
+    (LOCATED_IN), hóspedes que avaliaram cada anúncio (REVIEWED) e bairros vizinhos (BORDERS). Use para vizinhos,
+    hóspedes em comum, caminhos e conexões. O grafo não tem preços nem notas. Devolve no máximo 50 linhas, com o
+    total e se o resultado foi truncado. O esquema está no resource esquema://grafo."""
     q = (consulta or "").strip().rstrip(";").strip()
     if not q:
         raise ToolError("A consulta está vazia. Envie uma consulta Cypher MATCH ... RETURN.")
@@ -259,8 +304,8 @@ def consultar_grafo(
         elif "AccessMode" in codigo or "Forbidden" in codigo:
             dica = "O grafo é somente leitura. Use MATCH ... RETURN."
         elif "Timeout" in codigo or "TimedOut" in codigo:
-            dica = (f"A consulta passou de {TIMEOUT_S} s. Parta de um nó específico (por user_id ou business_id) "
-                    "e limite o tamanho dos caminhos.")
+            dica = (f"A consulta passou de {TIMEOUT_S} s. Parta de um nó específico (por listing_id, host_id, guest_id "
+                    "ou nome do bairro) e limite o tamanho dos caminhos.")
         else:
             dica = "Confira a consulta contra o esquema (resource esquema://grafo) e tente de novo."
         raise ToolError(f"Erro do Neo4j ({codigo}): {msg}\nDica: {dica}")
@@ -271,140 +316,161 @@ def consultar_grafo(
     return r
 
 
+BUSCAS = {
+    # tipo: (rótulo, consulta dos achados, contagem, nomes parecidos quando nada é encontrado)
+    "anuncio": ("anúncio",
+                "SELECT listing_id, name, neighbourhood, room_type, price, review_scores_rating, number_of_reviews "
+                "FROM listing WHERE unaccent(name) ILIKE unaccent(%(p)s) "
+                "ORDER BY lower(name) = lower(%(t)s) DESC, number_of_reviews DESC LIMIT 10",
+                "SELECT count(*) AS n FROM listing WHERE unaccent(name) ILIKE unaccent(%(p)s)",
+                "SELECT name FROM (SELECT DISTINCT name FROM listing WHERE similarity(name, %(t)s) > 0.3) n "
+                "ORDER BY similarity(name, %(t)s) DESC LIMIT 5"),
+    "anfitriao": ("anfitrião",
+                  "SELECT h.host_id, h.name, h.is_superhost, count(l.listing_id) AS anuncios_em_sao_paulo "
+                  "FROM host h JOIN listing l USING (host_id) WHERE unaccent(h.name) ILIKE unaccent(%(p)s) "
+                  "GROUP BY h.host_id ORDER BY lower(h.name) = lower(%(t)s) DESC, count(l.listing_id) DESC LIMIT 10",
+                  "SELECT count(*) AS n FROM host WHERE unaccent(name) ILIKE unaccent(%(p)s)",
+                  "SELECT name FROM (SELECT DISTINCT name FROM host WHERE similarity(name, %(t)s) > 0.4) n "
+                  "ORDER BY similarity(name, %(t)s) DESC LIMIT 5"),
+    "hospede": ("hóspede",
+                "SELECT g.guest_id, g.name, count(r.review_id) AS avaliacoes "
+                "FROM guest g JOIN review r USING (guest_id) WHERE unaccent(g.name) ILIKE unaccent(%(p)s) "
+                "GROUP BY g.guest_id ORDER BY lower(g.name) = lower(%(t)s) DESC, count(r.review_id) DESC LIMIT 10",
+                "SELECT count(*) AS n FROM guest WHERE unaccent(name) ILIKE unaccent(%(p)s)",
+                "SELECT name FROM (SELECT DISTINCT name FROM guest WHERE similarity(name, %(t)s) > 0.5) n "
+                "ORDER BY similarity(name, %(t)s) DESC LIMIT 5"),
+    "bairro": ("bairro",
+               "SELECT n.name, n.group_name, count(l.listing_id) AS anuncios FROM neighbourhood n "
+               "LEFT JOIN listing l ON l.neighbourhood = n.name WHERE unaccent(n.name) ILIKE unaccent(%(p)s) "
+               "GROUP BY n.name ORDER BY lower(unaccent(n.name)) = lower(unaccent(%(t)s)) DESC, count(l.listing_id) DESC LIMIT 10",
+               "SELECT count(*) AS n FROM neighbourhood WHERE unaccent(name) ILIKE unaccent(%(p)s)",
+               "SELECT name FROM neighbourhood WHERE similarity(unaccent(name), unaccent(%(t)s)) > 0.3 "
+               "ORDER BY similarity(unaccent(name), unaccent(%(t)s)) DESC LIMIT 5"),
+    "comodidade": ("comodidade",
+                   "SELECT amenity, count(*) AS anuncios FROM listing_amenity WHERE amenity ILIKE %(p)s "
+                   "GROUP BY amenity ORDER BY lower(amenity) = lower(%(t)s) DESC, count(*) DESC LIMIT 10",
+                   "SELECT count(DISTINCT amenity) AS n FROM listing_amenity WHERE amenity ILIKE %(p)s",
+                   "SELECT amenity AS name FROM (SELECT DISTINCT amenity FROM listing_amenity) c "
+                   "WHERE similarity(amenity, %(t)s) > 0.3 ORDER BY similarity(amenity, %(t)s) DESC LIMIT 5"),
+}
+
+
 @mcp.tool
 def buscar_entidade(
     nome: Annotated[str, Field(description="O nome, ou parte dele, a procurar")],
-    tipo: Annotated[Literal["negocio", "usuario", "categoria"], Field(description="O que procurar")],
+    tipo: Annotated[Literal["anuncio", "anfitriao", "hospede", "bairro", "comodidade"], Field(description="O que procurar")],
 ) -> dict:
-    """Acha negócios, usuários ou categorias pelo nome (sem diferenciar maiúsculas) e devolve os ids.
-    Use antes de detalhes_negocio ou comparar_negocios, e para conferir se algo existe.
-    Mostra também quando há vários com o mesmo nome. Categorias estão em inglês (ex.: 'Mexican')."""
+    """Acha anúncios, anfitriões, hóspedes, bairros ou comodidades pelo nome (sem diferenciar maiúsculas nem acentos)
+    e devolve os ids. Use antes de detalhes_anuncio ou comparar_anuncios, e para conferir se algo existe.
+    Mostra também quando há vários com o mesmo nome. Comodidades estão em inglês (ex.: 'Pool', 'Kitchen')."""
     termo = (nome or "").strip()
     if len(termo) < 2:
         raise ToolError("Informe pelo menos 2 caracteres do nome a procurar.")
-    padrao = "%" + termo.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    rotulo, achar, contar, parecidos = BUSCAS[tipo]
+    params = {"p": "%" + termo.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%", "t": termo}
     try:
-        if tipo == "negocio":
-            achados = sql_linhas(
-                "SELECT business_id, name, address, stars, review_count, is_open FROM business WHERE name ILIKE %s "
-                "ORDER BY lower(name) = lower(%s) DESC, review_count DESC LIMIT 10", (padrao, termo))
-            total = sql_linhas("SELECT count(*) AS n FROM business WHERE name ILIKE %s", (padrao,))[0]["n"]
-            parecidos = ("SELECT name FROM (SELECT DISTINCT name FROM business WHERE similarity(name, %s) > 0.3) n "
-                         "ORDER BY similarity(name, %s) DESC LIMIT 5")
-        elif tipo == "usuario":
-            achados = sql_linhas(
-                "SELECT user_id, name, review_count, fans, yelping_since FROM users WHERE name ILIKE %s "
-                "ORDER BY lower(name) = lower(%s) DESC, review_count DESC LIMIT 10", (padrao, termo))
-            total = sql_linhas("SELECT count(*) AS n FROM users WHERE name ILIKE %s", (padrao,))[0]["n"]
-            parecidos = ("SELECT name FROM (SELECT DISTINCT name FROM users WHERE similarity(name, %s) > 0.4) n "
-                         "ORDER BY similarity(name, %s) DESC LIMIT 5")
-        else:
-            achados = sql_linhas(
-                "SELECT category, count(*) AS negocios FROM business_category WHERE category ILIKE %s "
-                "GROUP BY category ORDER BY lower(category) = lower(%s) DESC, count(*) DESC LIMIT 10", (padrao, termo))
-            total = sql_linhas("SELECT count(DISTINCT category) AS n FROM business_category WHERE category ILIKE %s",
-                               (padrao,))[0]["n"]
-            parecidos = ("SELECT category AS name FROM (SELECT DISTINCT category FROM business_category) c "
-                         "WHERE similarity(category, %s) > 0.3 ORDER BY similarity(category, %s) DESC LIMIT 5")
+        achados = sql_linhas(achar, params)
+        total = sql_linhas(contar, params)[0]["n"]
     except psycopg.Error as e:
         raise erro_sql(e)
 
-    rotulo = {"negocio": "negócio", "usuario": "usuário", "categoria": "categoria"}[tipo]
     r = {"tipo": tipo, "termo": termo, "encontrados": total, "resultados": achados}
     if total == 0:
-        r["mensagem"] = f"Nenhum(a) {rotulo} com '{termo}' no nome em Santa Barbara."
+        r["mensagem"] = f"Nenhum(a) {rotulo} com '{termo}' no nome nos dados de São Paulo."
         try:
-            sugestoes = [x["name"] for x in sql_linhas(parecidos, (termo, termo))]
+            sugestoes = [x["name"] for x in sql_linhas(parecidos, params)]
         except psycopg.Error as e:
             raise erro_sql(e)
         if sugestoes:
             r["nomes_parecidos"] = sugestoes
-        if tipo == "categoria":
-            r["mensagem"] += " As categorias estão em inglês (ex.: 'Mexican', 'Coffee & Tea')."
+        if tipo == "comodidade":
+            r["mensagem"] += " As comodidades estão em inglês (ex.: 'Pool', 'Air conditioning', 'Kitchen')."
         return r
     if total > len(achados):
         r["aviso"] = f"{total} encontrados; só os {len(achados)} primeiros foram devolvidos. Refine o nome."
-    chave = "category" if tipo == "categoria" else "name"
+    chave = "amenity" if tipo == "comodidade" else "name"
     iguais = [a for a in achados if a[chave].lower() == termo.lower()]
-    if tipo != "categoria" and len(iguais) > 1:
-        r["homonimos"] = (f"Há {len(iguais)} {rotulo}s chamados exatamente '{termo}'. "
-                          "Use o id para escolher; endereço e números ajudam a diferenciar.")
+    if tipo in ("anuncio", "anfitriao", "hospede") and len(iguais) > 1:
+        r["homonimos"] = (f"Há {len(iguais)} {rotulo}s chamados exatamente '{termo}'"
+                          + (" (talvez mais, além dos 10 devolvidos)" if total > len(achados) else "")
+                          + ". Use o id para escolher; os outros campos ajudam a diferenciar.")
     return r
 
 
 @mcp.tool
-def detalhes_negocio(
-    business_id: Annotated[str, Field(description="O business_id, com 22 caracteres")],
+def detalhes_anuncio(
+    # int | str: um texto errado chega até aqui e recebe a dica em português, em vez do erro de validação em inglês
+    listing_id: Annotated[int | str, Field(description="O listing_id, um número inteiro")],
 ) -> dict:
-    """Todos os dados de um negócio: endereço, nota, faixa de preço, se está aberto, check-ins,
-    categorias, e as avaliações presentes no banco (quantidade, média, primeira e última).
-    Para achar o business_id a partir do nome, use buscar_entidade."""
-    bid = (business_id or "").strip()
-    if not ID_YELP.match(bid):
-        raise ToolError(f"business_id inválido: '{bid}'. Um business_id tem 22 caracteres (letras, números, '-' e '_'). "
-                        "Para achar o id a partir do nome, use buscar_entidade com tipo 'negocio'.")
+    """Todos os dados de um anúncio: bairro, tipo, capacidade, preço, notas, ocupação e receita estimadas,
+    anfitrião, comodidades e as avaliações presentes no banco (de 2025 em diante: quantidade, primeira e última).
+    Para achar o listing_id a partir do nome, use buscar_entidade."""
+    lid = id_valido(listing_id, "listing_id")
     try:
-        linhas = sql_linhas("SELECT * FROM business WHERE business_id = %s", (bid,))
+        linhas = sql_linhas("SELECT * FROM listing WHERE listing_id = %s", (lid,))
         if not linhas:
-            raise ToolError(f"Nenhum negócio com business_id '{bid}'. Confira o id com buscar_entidade.")
-        negocio = linhas[0]
-        negocio["categorias"] = [x["category"] for x in sql_linhas(
-            "SELECT category FROM business_category WHERE business_id = %s ORDER BY category", (bid,))]
-        negocio["avaliacoes_no_banco"] = sql_linhas(
-            "SELECT count(*) AS quantidade, round(avg(stars), 2) AS media_das_notas, "
-            "min(date)::date AS primeira, max(date)::date AS ultima FROM review WHERE business_id = %s", (bid,))[0]
+            raise ToolError(f"Nenhum anúncio com listing_id {lid}. Confira o id com buscar_entidade.")
+        anuncio = linhas[0]
+        anuncio["anfitriao"] = sql_linhas(
+            "SELECT h.host_id, h.name, h.is_superhost, h.listings_count AS anuncios_no_airbnb_inteiro, "
+            "(SELECT count(*) FROM listing WHERE host_id = h.host_id) AS anuncios_em_sao_paulo "
+            "FROM host h WHERE h.host_id = %s", (anuncio["host_id"],))[0]
+        anuncio["comodidades"] = [x["amenity"] for x in sql_linhas(
+            "SELECT amenity FROM listing_amenity WHERE listing_id = %s ORDER BY amenity", (lid,))]
+        anuncio["avaliacoes_no_banco"] = sql_linhas(
+            "SELECT count(*) AS quantidade, min(date) AS primeira, max(date) AS ultima "
+            "FROM review WHERE listing_id = %s", (lid,))[0]
     except psycopg.Error as e:
         raise erro_sql(e)
-    negocio["observacao"] = ("stars e review_count vêm do Yelp; avaliacoes_no_banco conta as avaliações presentes "
-                             "na tabela review. price_range nulo quer dizer faixa de preço desconhecida.")
-    return negocio
+    anuncio["observacao"] = ("number_of_reviews conta a vida toda do anúncio; avaliacoes_no_banco conta só as de 2025 "
+                             "em diante. price nulo quer dizer preço não informado.")
+    return anuncio
 
 
 @mcp.tool
-def comparar_negocios(
-    business_ids: Annotated[list[str], Field(description="De 2 a 5 business_id")],
+def comparar_anuncios(
+    listing_ids: Annotated[list[int | str], Field(description="De 2 a 5 listing_id (números inteiros)")],
 ) -> dict:
-    """Compara de 2 a 5 negócios lado a lado e calcula o vencedor de cada critério: maior nota, mais
-    avaliações, mais check-ins, mais barato e maior média das avaliações no banco. Os cálculos são
-    feitos aqui, não pelo modelo; empates aparecem com mais de um id."""
-    ids = list(dict.fromkeys(i.strip() for i in business_ids or []))
+    """Compara de 2 a 5 anúncios lado a lado e calcula o vencedor de cada critério: maior nota, mais avaliações,
+    mais barato, maior capacidade, maior ocupação estimada e maior receita estimada. Os cálculos são feitos aqui,
+    não pelo modelo; empates aparecem com mais de um id."""
+    ids = list(dict.fromkeys(id_valido(i, "listing_id") for i in listing_ids or []))
     if not 2 <= len(ids) <= 5:
-        raise ToolError(f"Envie de 2 a 5 business_id diferentes; recebi {len(ids)}.")
-    invalidos = [i for i in ids if not ID_YELP.match(i)]
-    if invalidos:
-        raise ToolError(f"business_id inválido: {invalidos}. Cada id tem 22 caracteres; use buscar_entidade para achar.")
+        raise ToolError(f"Envie de 2 a 5 listing_id diferentes; recebi {len(ids)}.")
     try:
-        negocios = sql_linhas(
-            "SELECT b.business_id, b.name, b.address, b.stars, b.review_count, b.checkin_count, b.price_range, b.is_open, "
-            "round(avg(r.stars), 2) AS media_no_banco, count(r.review_id) AS avaliacoes_no_banco "
-            "FROM business b LEFT JOIN review r USING (business_id) WHERE b.business_id = ANY(%s) "
-            "GROUP BY b.business_id ORDER BY b.name", (ids,))
+        anuncios = sql_linhas(
+            "SELECT l.listing_id, l.name, l.neighbourhood, l.room_type, l.accommodates, l.price, l.review_scores_rating, "
+            "l.number_of_reviews, l.estimated_occupancy_l365d, l.estimated_revenue_l365d, "
+            "(SELECT count(*) FROM review r WHERE r.listing_id = l.listing_id) AS avaliacoes_no_banco "
+            "FROM listing l WHERE l.listing_id = ANY(%s) ORDER BY l.listing_id", (ids,))
     except psycopg.Error as e:
         raise erro_sql(e)
-    achados = {n["business_id"] for n in negocios}
+    achados = {a["listing_id"] for a in anuncios}
     ausentes = [i for i in ids if i not in achados]
-    if len(negocios) < 2:
-        raise ToolError(f"Só {len(negocios)} dos ids existe(m); não há o que comparar. Ids inexistentes: {ausentes}. "
+    if len(anuncios) < 2:
+        raise ToolError(f"Só {len(anuncios)} dos ids existe(m); não há o que comparar. Ids inexistentes: {ausentes}. "
                         "Confira com buscar_entidade.")
 
     def vencedores(coluna, maior=True):
-        valores = [n[coluna] for n in negocios if n[coluna] is not None]
+        valores = [a[coluna] for a in anuncios if a[coluna] is not None]
         if not valores:
-            return {"valor": None, "business_ids": [], "observacao": "nenhum dos negócios tem esse dado"}
+            return {"valor": None, "listing_ids": [], "observacao": "nenhum dos anúncios tem esse dado"}
         alvo = max(valores) if maior else min(valores)
-        return {"valor": alvo, "business_ids": [n["business_id"] for n in negocios if n[coluna] == alvo]}
+        return {"valor": alvo, "listing_ids": [a["listing_id"] for a in anuncios if a[coluna] == alvo]}
 
     return {
-        "negocios": negocios,
+        "anuncios": anuncios,
         "melhor": {
-            "maior_nota": vencedores("stars"),
-            "mais_avaliacoes": vencedores("review_count"),
-            "mais_checkins": vencedores("checkin_count"),
-            "mais_barato": vencedores("price_range", maior=False),
-            "maior_media_no_banco": vencedores("media_no_banco"),
+            "maior_nota": vencedores("review_scores_rating"),
+            "mais_avaliacoes": vencedores("number_of_reviews"),
+            "mais_barato": vencedores("price", maior=False),
+            "maior_capacidade": vencedores("accommodates"),
+            "maior_ocupacao": vencedores("estimated_occupancy_l365d"),
+            "maior_receita": vencedores("estimated_revenue_l365d"),
         },
         "ausentes": ausentes,
-        "observacao": "Em 'melhor', mais de um id quer dizer empate. 'mais_barato' ignora negócios sem faixa de preço.",
+        "observacao": "Em 'melhor', mais de um id quer dizer empate. Critérios ignoram anúncios sem o dado "
+                      "(preço ou nota nulos).",
     }
 
 
@@ -425,11 +491,11 @@ def esquema_grafo() -> str:
 # ─── PROMPT ───
 
 @mcp.prompt
-def analisar_negocio(nome: str) -> str:
-    """Pede uma análise de um negócio pelo nome: dados, categorias e comparação com concorrentes."""
-    return (f"Analise o negócio '{nome}' em Santa Barbara. Encontre-o pelo nome (se houver mais de um, diga quais), "
-            "mostre nota, faixa de preço, categorias e avaliações, e compare-o com dois concorrentes da mesma "
-            "categoria principal. Cite o business_id de cada negócio mencionado.")
+def analisar_bairro(nome: str) -> str:
+    """Pede uma análise de um bairro de São Paulo: oferta, preços, notas e comparação com os bairros vizinhos."""
+    return (f"Analise o bairro '{nome}' de São Paulo. Confirme o nome com buscar_entidade (os nomes estão sem acento), "
+            "mostre quantos anúncios ele tem, o preço mediano por noite, a nota média e o tipo de acomodação mais comum, "
+            "e compare esses números com os dos bairros vizinhos (relação BORDERS no grafo).")
 
 
 if __name__ == "__main__":

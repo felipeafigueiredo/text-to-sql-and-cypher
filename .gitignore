@@ -1,6 +1,8 @@
-# Dados do Yelp: os termos de uso proíbem redistribuir (ver PLANO.md, T25)
+# Dados: o recorte fica no Drive, fora do Git (ver PLANO.md, T38). Yelp-JSON/ é o dataset antigo, só local
 Yelp-JSON/
 dados/recorte/
+*.csv.gz
+*.geojson
 *.zip
 
 # Spike: experimento descartável, não faz parte da entrega

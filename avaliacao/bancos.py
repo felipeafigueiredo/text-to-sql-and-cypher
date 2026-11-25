@@ -11,12 +11,12 @@ class Bancos:
 
     def __init__(self, pg_dsn=None, neo4j_uri=None, neo4j_usuario=None, neo4j_senha=None):
         self.pg = psycopg.connect(
-            pg_dsn or os.environ.get("YELP_PG_DSN", "host=localhost port=5432 dbname=yelp user=leitor password=leitor"),
+            pg_dsn or os.environ.get("AIRBNB_PG_DSN", "host=localhost port=5432 dbname=airbnb user=leitor password=leitor"),
             autocommit=True, row_factory=dict_row)
         self.neo4j = GraphDatabase.driver(
-            neo4j_uri or os.environ.get("YELP_NEO4J_URI", "bolt://localhost:7687"),
-            auth=(neo4j_usuario or os.environ.get("YELP_NEO4J_USUARIO", "neo4j"),
-                  neo4j_senha or os.environ.get("YELP_NEO4J_SENHA", "yelp-santa-barbara")))
+            neo4j_uri or os.environ.get("AIRBNB_NEO4J_URI", "bolt://localhost:7687"),
+            auth=(neo4j_usuario or os.environ.get("AIRBNB_NEO4J_USUARIO", "neo4j"),
+                  neo4j_senha or os.environ.get("AIRBNB_NEO4J_SENHA", "airbnb-sao-paulo")))
 
     def sql(self, consulta, **parametros):
         """Linhas como dicionários. Parâmetros no formato %(nome)s."""
