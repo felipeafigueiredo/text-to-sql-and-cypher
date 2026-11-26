@@ -309,9 +309,10 @@ def _(db):
     anfitriao(db, SEAZONE)
     total = db.valor("SELECT listings_count FROM host WHERE host_id = %(h)s", h=SEAZONE)
     sp = db.valor("SELECT count(*) FROM listing WHERE host_id = %(h)s", h=SEAZONE)
-    return gab(f"Depende da base, e a resposta certa diz qual está usando: {total} no Airbnb inteiro "
-               f"(host.listings_count) e {sp} em São Paulo (linhas da tabela listing). Dar só um dos números sem dizer "
-               "de onde ele vem está incompleto; dar o número de São Paulo como se fosse o total está errado.",
+    return gab(f"Depende da base, e a resposta certa traz os dois números, cada um com a sua base: {total} no Airbnb "
+               f"inteiro (host.listings_count) e {sp} em São Paulo (linhas da tabela listing). Dar só um dos números "
+               f"está incompleto, mesmo dizendo de onde ele vem (ex.: só '{sp} em São Paulo'); dar o número de São Paulo "
+               "como se fosse o total está errado.",
                deve=[num(total), num(sp)])
 
 

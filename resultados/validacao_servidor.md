@@ -1,8 +1,8 @@
 # Validação do servidor MCP (sem LLM)
 
-Gerado por `servidor/validar.py` em 2026-11-25 11:24. Python 3.14.2, FastMCP 4.1.4, Windows. Dados: Inside Airbnb, São Paulo (coleta de setembro de 2026, avaliações desde 2025).
+Gerado por `servidor/validar.py` em 2026-11-26 15:00. Python 3.14.2, FastMCP 4.1.4, Windows. Dados: Inside Airbnb, São Paulo (coleta de setembro de 2026, avaliações desde 2025).
 
-**54 de 54 casos passaram.**
+**57 de 57 casos passaram.**
 
 ## O que o servidor oferece
 
@@ -29,30 +29,33 @@ Gerado por `servidor/validar.py` em 2026-11-25 11:24. Python 3.14.2, FastMCP 4.1
 | ✅ | resource | ler esquema://sql | `resources/read esquema://sql` | BANCO RELACIONAL (PostgreSQL) — ferramenta consultar_sql. Cidade única: São Paulo, coleta de setembro de 2026. |
 | ✅ | resource | ler esquema://grafo | `resources/read esquema://grafo` | BANCO DE GRAFO (Neo4j) — ferramenta consultar_grafo. Cidade única: São Paulo. |
 | ✅ | prompt | analisar_bairro preenche o nome | `prompts/get analisar_bairro(nome='Pinheiros')` | Analise o bairro 'Pinheiros' de São Paulo. Confirme o nome com buscar_entidade (os nomes estão sem acento), mostre quant |
-| ✅ | consultar_sql | contar neighbourhood | `consultar_sql({"consulta": "SELECT count(*) FROM neighbourhood"})` | 96 (esperado 96) · 0.61 s |
-| ✅ | consultar_sql | contar host | `consultar_sql({"consulta": "SELECT count(*) FROM host"})` | 15883 (esperado 15883) · 0.05 s |
-| ✅ | consultar_sql | contar listing | `consultar_sql({"consulta": "SELECT count(*) FROM listing"})` | 44080 (esperado 44080) · 0.03 s |
-| ✅ | consultar_sql | contar listing_amenity | `consultar_sql({"consulta": "SELECT count(*) FROM listing_amenity"})` | 1251474 (esperado 1251474) · 0.53 s |
-| ✅ | consultar_sql | contar guest | `consultar_sql({"consulta": "SELECT count(*) FROM guest"})` | 651156 (esperado 651156) · 0.3 s |
-| ✅ | consultar_sql | contar review | `consultar_sql({"consulta": "SELECT count(*) FROM review"})` | 933607 (esperado 933607) · 0.35 s |
-| ✅ | consultar_sql | resultado grande vem truncado e com o total | `consultar_sql({"consulta": "SELECT name FROM listing ORDER BY name"})` | truncado=True, total=44080, devolvidas=50 · 0.48 s |
-| ✅ | consultar_sql | bairro com acento casa com o nome sem acento (unaccent) | `consultar_sql({"consulta": "SELECT name FROM neighbourhood WHERE unaccent(name) ILIKE unaccent('Brás')"})` | [['Bras']] · 0.03 s |
-| ✅ | consultar_grafo | contar HOSTS | `consultar_grafo({"consulta": "MATCH ()-[r:HOSTS]->() RETURN count(r) AS n"})` | 44080 (esperado 44080) · 1.08 s |
+| ✅ | consultar_sql | contar neighbourhood | `consultar_sql({"consulta": "SELECT count(*) FROM neighbourhood"})` | 96 (esperado 96) · 0.17 s |
+| ✅ | consultar_sql | contar host | `consultar_sql({"consulta": "SELECT count(*) FROM host"})` | 15883 (esperado 15883) · 0.01 s |
+| ✅ | consultar_sql | contar listing | `consultar_sql({"consulta": "SELECT count(*) FROM listing"})` | 44080 (esperado 44080) · 0.01 s |
+| ✅ | consultar_sql | contar listing_amenity | `consultar_sql({"consulta": "SELECT count(*) FROM listing_amenity"})` | 1251474 (esperado 1251474) · 0.05 s |
+| ✅ | consultar_sql | contar guest | `consultar_sql({"consulta": "SELECT count(*) FROM guest"})` | 651156 (esperado 651156) · 0.03 s |
+| ✅ | consultar_sql | contar review | `consultar_sql({"consulta": "SELECT count(*) FROM review"})` | 933607 (esperado 933607) · 0.06 s |
+| ✅ | consultar_sql | resultado grande vem truncado e com o total | `consultar_sql({"consulta": "SELECT name FROM listing ORDER BY name"})` | truncado=True, total=44080, devolvidas=50 · 0.29 s |
+| ✅ | consultar_sql | bairro com acento casa com o nome sem acento (unaccent) | `consultar_sql({"consulta": "SELECT name FROM neighbourhood WHERE unaccent(name) ILIKE unaccent('Brás')"})` | [['Bras']] · 0.01 s |
+| ✅ | consultar_grafo | contar HOSTS | `consultar_grafo({"consulta": "MATCH ()-[r:HOSTS]->() RETURN count(r) AS n"})` | 44080 (esperado 44080) · 0.1 s |
 | ✅ | consultar_grafo | contar LOCATED_IN | `consultar_grafo({"consulta": "MATCH ()-[r:LOCATED_IN]->() RETURN count(r) AS n"})` | 44080 (esperado 44080) · 0.01 s |
 | ✅ | consultar_grafo | contar REVIEWED | `consultar_grafo({"consulta": "MATCH ()-[r:REVIEWED]->() RETURN count(r) AS n"})` | 899238 (esperado 899238) · 0.01 s |
 | ✅ | consultar_grafo | contar BORDERS | `consultar_grafo({"consulta": "MATCH ()-[r:BORDERS]->() RETURN count(r) AS n"})` | 235 (esperado 235) · 0.01 s |
-| ✅ | consultar_grafo | lista grande vem truncada e com o total | `consultar_grafo({"consulta": "MATCH (n:Neighbourhood) RETURN n.name AS bairro"})` | truncado=True, total=96 · 0.04 s |
-| ✅ | consultar_grafo | vizinhos de um bairro, sem direção | `consultar_grafo({"consulta": "MATCH (:Neighbourhood {name: 'Pinheiros'})-[:BORDERS]-(n) RETURN n.name AS vizinho ORDER B` | ['Alto De Pinheiros', 'Butanta', 'Itaim Bibi', 'Jardim Paulista', 'Morumbi', 'Perdizes'] · 0.03 s |
-| ✅ | consultar_grafo | propriedade inexistente gera aviso de esquema (preço não está no grafo) | `consultar_grafo({"consulta": "MATCH (l:Listing)-[:LOCATED_IN]->(:Neighbourhood {name: 'Moema'}) RETURN avg(l.price) AS m` | ['Propriedade inexistente no grafo: price. Os nós só têm host_id, listing_id, guest_id e name. Preços, notas, datas, tipos, comodidades e contagens estão no SQL (consultar_sql).'] · 0.1 s |
+| ✅ | consultar_grafo | lista grande vem truncada e com o total | `consultar_grafo({"consulta": "MATCH (n:Neighbourhood) RETURN n.name AS bairro"})` | truncado=True, total=96 · 0.02 s |
+| ✅ | consultar_grafo | vizinhos de um bairro, sem direção | `consultar_grafo({"consulta": "MATCH (:Neighbourhood {name: 'Pinheiros'})-[:BORDERS]-(n) RETURN n.name AS vizinho ORDER B` | ['Alto De Pinheiros', 'Butanta', 'Itaim Bibi', 'Jardim Paulista', 'Morumbi', 'Perdizes'] · 0.01 s |
+| ✅ | consultar_grafo | propriedade inexistente gera aviso de esquema (preço não está no grafo) | `consultar_grafo({"consulta": "MATCH (l:Listing)-[:LOCATED_IN]->(:Neighbourhood {name: 'Moema'}) RETURN avg(l.price) AS m` | ['Propriedade inexistente no grafo: price. Os nós só têm host_id, listing_id, guest_id e name. Preços, notas, datas, tipos, comodidades e contagens estão no SQL (consultar_sql).'] · 0.02 s |
+| ✅ | consultar_grafo | BORDERS com seta gera aviso (cada par está gravado numa direção só) | `consultar_grafo({"consulta": "MATCH (:Neighbourhood {name: 'Pinheiros'})-[:BORDERS]->(v:Neighbourhood) RETURN v.name"})` | 0 linha(s); ['BORDERS com direção: cada par de bairros vizinhos está gravado numa direção só, então a seta perde parte dos vizinhos. Escreva sem seta: (a)-[:BORDERS]-(b).'] · 0.01 s |
+| ✅ | consultar_grafo | BORDERS sem seta não gera aviso | `consultar_grafo({"consulta": "MATCH (:Neighbourhood {name: 'Pinheiros'})-[:BORDERS*1..2]-(v) RETURN count(DISTINCT v) AS` | sem avisos · 0.01 s |
 | ✅ | consultar_grafo | id entre aspas gera aviso (no grafo os ids são inteiros) | `consultar_grafo({"consulta": "MATCH (l:Listing {listing_id: '13625646'}) RETURN l.name"})` | ['Id entre aspas: no grafo os ids são inteiros. Escreva {listing_id: 123}, sem aspas.'] · 0.01 s |
-| ✅ | buscar_entidade | anúncio pelo nome | `buscar_entidade({"nome": "library in the sky", "tipo": "anuncio"})` | 1 encontrado(s): ['Noren - A library in the sky @ Copan'] · 0.19 s |
+| ✅ | buscar_entidade | anúncio pelo nome | `buscar_entidade({"nome": "library in the sky", "tipo": "anuncio"})` | 1 encontrado(s): ['Noren - A library in the sky @ Copan'] · 0.16 s |
 | ✅ | buscar_entidade | bairro escrito com acento | `buscar_entidade({"nome": "Brás", "tipo": "bairro"})` | [{'name': 'Bras', 'group_name': 'Mooca', 'anuncios': 911}, {'name': 'Brasilandia', 'group_name': 'Freguesia-Brasilandia', 'anuncios': 17}] · 0.01 s |
-| ✅ | buscar_entidade | comodidade em inglês | `buscar_entidade({"nome": "Pool", "tipo": "comodidade"})` | [{'amenity': 'Pool', 'anuncios': 14579}, {'amenity': 'Pool table', 'anuncios': 2791}, {'amenity': 'Shared pool', 'anuncios': 1710}] · 0.65 s |
+| ✅ | buscar_entidade | comodidade em inglês | `buscar_entidade({"nome": "Pool", "tipo": "comodidade"})` | [{'amenity': 'Pool', 'anuncios': 14579}, {'amenity': 'Pool table', 'anuncios': 2791}, {'amenity': 'Shared pool', 'anuncios': 1710}] · 0.58 s |
 | ✅ | buscar_entidade | homônimos são sinalizados | `buscar_entidade({"nome": "Marcelo", "tipo": "anfitriao"})` | Há 10 anfitriãos chamados exatamente 'Marcelo' (talvez mais, além dos 10 devolvidos). Use o id para escolher; os outros campos ajudam a diferenciar. · 0.05 s |
 | ✅ | buscar_entidade | anfitrião mostra os anúncios no Airbnb inteiro e em São Paulo | `buscar_entidade({"nome": "Seazone", "tipo": "anfitriao"})` | [{'host_id': 227777128, 'name': 'Seazone', 'is_superhost': True, 'anuncios_no_airbnb_inteiro': 3435, 'anuncios_em_sao_paulo': 209}] · 0.03 s |
-| ✅ | buscar_entidade | item inexistente: vazio, sem erro | `buscar_entidade({"nome": "Pousada Potiguar Imaginária", "tipo": "anuncio"})` | Nenhum(a) anúncio com 'Pousada Potiguar Imaginária' no nome nos dados de São Paulo. · 0.45 s |
-| ✅ | buscar_entidade | comodidade em português sugere o nome em inglês | `buscar_entidade({"nome": "piscina", "tipo": "comodidade"})` | Nenhum(a) comodidade com 'piscina' no nome nos dados de São Paulo. As comodidades estão em inglês (ex.: 'Pool', 'Air conditioning', 'Kitchen'). sugestões=None · 1.31 s |
-| ✅ | detalhes_anuncio | detalhes de um anúncio | `detalhes_anuncio({"listing_id": 13625646})` | Noren - A library in the sky @ Copan, nota 4.85, R$ 584.7, 41 comodidades, 108 avaliações no banco · 0.02 s |
+| ✅ | buscar_entidade | item inexistente: vazio, sem erro | `buscar_entidade({"nome": "Pousada Potiguar Imaginária", "tipo": "anuncio"})` | Nenhum(a) anúncio com 'Pousada Potiguar Imaginária' no nome nos dados de São Paulo. · 1.25 s |
+| ✅ | buscar_entidade | nome procurado com o tipo errado indica o tipo certo | `buscar_entidade({"nome": "Seazone", "tipo": "bairro"})` | Nenhum(a) bairro com 'Seazone' no nome nos dados de São Paulo. Mas o nome existe com outro tipo: 1 anfitrião(s). Se for isso, repita a busca com tipo='anfitriao'. · 0.86 s |
+| ✅ | buscar_entidade | comodidade em português sugere o nome em inglês | `buscar_entidade({"nome": "piscina", "tipo": "comodidade"})` | Nenhum(a) comodidade com 'piscina' no nome nos dados de São Paulo. As comodidades estão em inglês (ex.: 'Pool', 'Air conditioning', 'Kitchen'). sugestões=None · 1.99 s |
+| ✅ | detalhes_anuncio | detalhes de um anúncio | `detalhes_anuncio({"listing_id": 13625646})` | Noren - A library in the sky @ Copan, nota 4.85, R$ 584.7, 41 comodidades, 108 avaliações no banco · 0.05 s |
 | ✅ | comparar_anuncios | cálculo do melhor em cada critério | `comparar_anuncios({"listing_ids": [13625646, 680472748773959587]})` | {"valor": 4.85, "listing_ids": [13625646]} {"valor": 413.0, "listing_ids": [680472748773959587]} · 0.01 s |
 | ✅ | comparar_anuncios | id inexistente aparece em 'ausentes' | `comparar_anuncios({"listing_ids": [13625646, 680472748773959587, 1]})` | ausentes=[1] · 0.01 s |
 | ✅ | erro | SQL: comando de escrita | `consultar_sql({"consulta": "DELETE FROM review"})` | isError=True: Só consultas de leitura são permitidas: o comando deve começar com SELECT ou WITH. O banco é somente leitura. · 0.0 s |
@@ -66,12 +69,12 @@ Gerado por `servidor/validar.py` em 2026-11-25 11:24. Python 3.14.2, FastMCP 4.1
 | ✅ | erro | SQL: consulta vazia | `consultar_sql({"consulta": "  "})` | isError=True: A consulta está vazia. Envie um comando SELECT. · 0.0 s |
 | ✅ | erro | SQL: argumento com tipo errado | `consultar_sql({"consulta": 123})` | isError=True: 1 validation error for call[consultar_sql] consulta Input should be a valid string [type=string_type, input_value=123, input_type=int] For further information visit https://errors.pydantic.dev/2.14/v/string_type · 0.0 s |
 | ✅ | erro | SQL: argumento faltando | `consultar_sql({})` | isError=True: 1 validation error for call[consultar_sql] consulta Missing required argument [type=missing_argument, input_value={}, input_type=dict] For further information visit https://errors.pydantic.dev/2.14/v/missing_argument · 0.0 s |
-| ✅ | erro | SQL: consulta lenta é cancelada | `consultar_sql({"consulta": "SELECT count(*) FROM review a, review b"})` | isError=True: Erro do PostgreSQL: canceling statement due to statement timeout Dica: A consulta passou de 15 s e foi cancelada. Evite produtos cartesianos (junções sem condição), filtre antes de juntar e use LIMIT. · 15.04 s |
+| ✅ | erro | SQL: consulta lenta é cancelada | `consultar_sql({"consulta": "SELECT count(*) FROM review a, review b"})` | isError=True: Erro do PostgreSQL: canceling statement due to statement timeout Dica: A consulta passou de 15 s e foi cancelada. Evite produtos cartesianos (junções sem condição), filtre antes de juntar e use LIMIT. · 15.02 s |
 | ✅ | erro | Cypher: comando de escrita | `consultar_grafo({"consulta": "CREATE (n:Guest {name: 'x'})"})` | isError=True: O grafo é somente leitura: 'CREATE' não é permitido. Use MATCH ... RETURN. · 0.0 s |
-| ✅ | erro | Cypher: sintaxe | `consultar_grafo({"consulta": "MATCH (g:Guest RETURN g"})` | isError=True: Erro do Neo4j (Neo.ClientError.Statement.SyntaxError): Invalid input 'RETURN': expected a parameter, '&', ')', ':', 'WHERE', '{' or '\|' (line 1, column 16 (offset: 15)) Dica: Erro de sintaxe Cypher. Confira parênteses, colchetes e o RETURN, e envie de novo. · 0.13 s |
+| ✅ | erro | Cypher: sintaxe | `consultar_grafo({"consulta": "MATCH (g:Guest RETURN g"})` | isError=True: Erro do Neo4j (Neo.ClientError.Statement.SyntaxError): Invalid input 'RETURN': expected a parameter, '&', ')', ':', 'WHERE', '{' or '\|' (line 1, column 16 (offset: 15)) Dica: Erro de sintaxe Cypher. Confira parênteses, colchetes e o RETURN, e envie de novo. · 0.03 s |
 | ✅ | erro | busca: tipo fora da lista | `buscar_entidade({"nome": "Copan", "tipo": "hotel"})` | isError=True: 1 validation error for call[buscar_entidade] tipo Input should be 'anuncio', 'anfitriao', 'hospede', 'bairro' or 'comodidade' [type=literal_error, input_value='hotel', input_type=str] For further information visit https://errors.pydantic.dev/2.14/v/literal_error · 0.0 s |
 | ✅ | erro | busca: nome curto demais | `buscar_entidade({"nome": "a", "tipo": "anuncio"})` | isError=True: Informe pelo menos 2 caracteres do nome a procurar. · 0.0 s |
 | ✅ | erro | detalhes: nome no lugar do id | `detalhes_anuncio({"listing_id": "Noren"})` | isError=True: listing_id inválido: 'Noren'. Um listing_id é um número inteiro, ex.: 1234567. Para achar o id a partir do nome, use buscar_entidade. · 0.0 s |
-| ✅ | erro | detalhes: id inexistente | `detalhes_anuncio({"listing_id": 1})` | isError=True: Nenhum anúncio com listing_id 1. Confira o id com buscar_entidade. · 0.0 s |
+| ✅ | erro | detalhes: id inexistente | `detalhes_anuncio({"listing_id": 1})` | isError=True: Nenhum anúncio com listing_id 1. Confira o id com buscar_entidade. · 0.01 s |
 | ✅ | erro | comparar: só um id | `comparar_anuncios({"listing_ids": [13625646]})` | isError=True: Envie de 2 a 5 listing_id diferentes; recebi 1. · 0.0 s |
-| ✅ | erro | comparar: nenhum id existe | `comparar_anuncios({"listing_ids": [1, 2]})` | isError=True: Só 0 dos ids existe(m); não há o que comparar. Ids inexistentes: [1, 2]. Confira com buscar_entidade. · 0.0 s |
+| ✅ | erro | comparar: nenhum id existe | `comparar_anuncios({"listing_ids": [1, 2]})` | isError=True: Só 0 dos ids existe(m); não há o que comparar. Ids inexistentes: [1, 2]. Confira com buscar_entidade. · 0.01 s |

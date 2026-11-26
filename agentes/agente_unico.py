@@ -36,10 +36,12 @@ Se o resultado vier com "truncado": true, você recebeu só parte das linhas: us
 consulta agregando.
 5. Se uma ferramenta devolver erro, leia a dica e corrija a chamada.
 6. Se a busca não encontrar o que foi perguntado, responda que não existe nos dados. Não troque por outro item \
-parecido e não insista em novas buscas.
+parecido e não insista em novas buscas. A exceção é quando a ferramenta disser que o nome existe com outro \
+tipo: aí repita a busca com esse tipo.
 7. Se a pergunta não for sobre os anúncios do Airbnb em São Paulo (anúncios, anfitriões, hóspedes, avaliações, \
 bairros), diga que não pode responder com estes dados, sem chamar ferramentas.
-8. Responda em português, de forma direta, com os números e nomes encontrados."""
+8. Responda em português, de forma direta, com os números e nomes encontrados. Identifique anúncios, anfitriões \
+e bairros pelo nome (traga o name na consulta), não só pelo id."""
 
 
 def prompt_sistema(servidor, bancos=("sql", "grafo"), regras=REGRAS):

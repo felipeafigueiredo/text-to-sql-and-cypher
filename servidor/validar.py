@@ -131,6 +131,13 @@ async def validar():
         await ok("consultar_grafo", "propriedade inexistente gera aviso de esquema (preço não está no grafo)", "consultar_grafo",
                  {"consulta": "MATCH (l:Listing)-[:LOCATED_IN]->(:Neighbourhood {name: 'Moema'}) RETURN avg(l.price) AS media"},
                  lambda d: (any("SQL" in a for a in d.get("avisos_de_esquema", [])), str(d.get("avisos_de_esquema"))))
+        await ok("consultar_grafo", "BORDERS com seta gera aviso (cada par está gravado numa direção só)", "consultar_grafo",
+                 {"consulta": "MATCH (:Neighbourhood {name: 'Pinheiros'})-[:BORDERS]->(v:Neighbourhood) RETURN v.name"},
+                 lambda d: (any("BORDERS com direção" in a for a in d.get("avisos_de_esquema", [])),
+                            f"{d['total_linhas']} linha(s); {d.get('avisos_de_esquema')}"))
+        await ok("consultar_grafo", "BORDERS sem seta não gera aviso", "consultar_grafo",
+                 {"consulta": "MATCH (:Neighbourhood {name: 'Pinheiros'})-[:BORDERS*1..2]-(v) RETURN count(DISTINCT v) AS n"},
+                 lambda d: ("avisos_de_esquema" not in d, str(d.get("avisos_de_esquema", "sem avisos"))))
         await ok("consultar_grafo", "id entre aspas gera aviso (no grafo os ids são inteiros)", "consultar_grafo",
                  {"consulta": "MATCH (l:Listing {listing_id: '13625646'}) RETURN l.name"},
                  lambda d: (d["total_linhas"] == 0 and any("aspas" in a for a in d.get("avisos_de_esquema", [])),
@@ -155,6 +162,10 @@ async def validar():
         await ok("buscar_entidade", "item inexistente: vazio, sem erro", "buscar_entidade",
                  {"nome": "Pousada Potiguar Imaginária", "tipo": "anuncio"},
                  lambda d: (d["encontrados"] == 0 and "mensagem" in d, d.get("mensagem", "")))
+        await ok("buscar_entidade", "nome procurado com o tipo errado indica o tipo certo", "buscar_entidade",
+                 {"nome": "Seazone", "tipo": "bairro"},
+                 lambda d: (d["encontrados"] == 0 and d.get("existe_com_outro_tipo", {}).get("anfitriao") == 1
+                            and "tipo='anfitriao'" in d["mensagem"], d.get("mensagem", "")))
         await ok("buscar_entidade", "comodidade em português sugere o nome em inglês", "buscar_entidade",
                  {"nome": "piscina", "tipo": "comodidade"},
                  lambda d: (d["encontrados"] == 0 and "inglês" in d.get("mensagem", ""),

@@ -59,6 +59,8 @@ neighbourhood(name, group_name)
   96 distritos. name SEM ACENTO, como no dado original: 'Republica', 'Bras', 'Butanta', 'Se', 'Jardim Paulista'.
   Para comparar com o que o usuário escreveu, use unaccent(): WHERE unaccent(name) ILIKE unaccent('Brás').
   group_name: agrupamento de distritos (subprefeitura), ex.: 'Pinheiros', 'Se', 'Vila Mariana'.
+  group_name NÃO é vizinhança: distritos do mesmo grupo não são necessariamente vizinhos, e vizinhos podem ser de
+  grupos diferentes. Bairros vizinhos só existem no grafo (BORDERS).
 
 host(host_id, name, is_superhost, identity_verified, listings_count)
   name: só o primeiro nome (ou o nome da empresa); há muitos homônimos.
@@ -222,6 +224,9 @@ def avisos_cypher(consulta):
         if {"price", "date", "amenity", "review_scores_rating", "number_of_reviews", "room_type", "neighbourhood"} & set(extra):
             texto += " Preços, notas, datas, tipos, comodidades e contagens estão no SQL (consultar_sql)."
         avisos.append(texto)
+    if re.search(r"\[[^\]]*:\s*`?BORDERS\b[^\]]*\]\s*->|<-\s*\[[^\]]*:\s*`?BORDERS\b", sem_texto):
+        avisos.append("BORDERS com direção: cada par de bairros vizinhos está gravado numa direção só, então a seta "
+                      "perde parte dos vizinhos. Escreva sem seta: (a)-[:BORDERS]-(b).")
     if re.search(r"_id\s*(?::|=|<>|IN)\s*\[?\s*''", sem_texto):
         avisos.append("Id entre aspas: no grafo os ids são inteiros. Escreva {listing_id: 123}, sem aspas.")
     return avisos
@@ -415,6 +420,20 @@ def buscar_entidade(
             r["nomes_parecidos"] = sugestoes
         if tipo == "comodidade":
             r["mensagem"] += " As comodidades estão em inglês (ex.: 'Pool', 'Air conditioning', 'Kitchen')."
+        # o nome pode existir com outro tipo (ex.: uma empresa procurada como bairro): dizer qual, para não concluir
+        # que não existe. Comodidade fica de fora: ali o caso é de tradução, e "piscina" casaria com nomes de anúncios
+        outros = {}
+        if tipo != "comodidade":
+            try:
+                outros = {t: sql_linhas(BUSCAS[t][2], params)[0]["n"] for t in BUSCAS if t != tipo}
+            except psycopg.Error as e:
+                raise erro_sql(e)
+            outros = {t: n for t, n in outros.items() if n}
+        if outros:
+            r["existe_com_outro_tipo"] = outros
+            r["mensagem"] += (" Mas o nome existe com outro tipo: "
+                              + ", ".join(f"{n} {BUSCAS[t][0]}(s)" for t, n in outros.items())
+                              + ". Se for isso, repita a busca com tipo=" + " ou ".join(f"'{t}'" for t in outros) + ".")
         return r
     if total > len(achados):
         r["aviso"] = f"{total} encontrados; só os {len(achados)} primeiros foram devolvidos. Refine o nome."
