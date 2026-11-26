@@ -52,6 +52,8 @@ Leva cerca de 30 segundos e grava 8 arquivos CSV (148 MB). Suba-os para uma past
 
 **3. Os agentes.** Abra [notebooks/02_agentes.ipynb](notebooks/02_agentes.ipynb) com o runtime **T4 GPU**, ajuste `DRIVE_DIR` e rode tudo. A primeira célula prepara a sessão sozinha (`ambiente/preparar.py`, cerca de 10 minutos) e as seguintes mostram os três sistemas (agente único, roteamento e verificador) respondendo as mesmas perguntas, com o trace de cada consulta e a checagem contra o gabarito.
 
+**4. A avaliação.** Abra [notebooks/03_avaliacao.ipynb](notebooks/03_avaliacao.ipynb) com o runtime **T4 GPU**, ajuste `DRIVE_DIR` e `RESULTADOS_DIR`, crie o secret `GOOGLE_API_KEY` do Colab com uma chave do Google AI Studio e rode tudo. O notebook faz as 60 execuções (20 perguntas × 3 sistemas) e depois o julgamento, gravando no Drive a cada linha; se a sessão cair, rodar de novo continua de onde parou.
+
 ## Avaliação
 
 `avaliacao/perguntas.py` tem as 20 perguntas, cada uma com categoria, banco, ferramenta esperada e a consulta de referência que calcula o gabarito direto nos bancos. Para ver as perguntas com o gabarito:
@@ -60,6 +62,8 @@ Leva cerca de 30 segundos e grava 8 arquivos CSV (148 MB). Suba-os para uma past
 python avaliacao/gabarito.py
 ```
 
+`avaliacao/avaliador.py` roda as perguntas nos sistemas pelo `answer()` e grava `execucoes.csv` (uma linha por execução, com as métricas e a checagem automática) e `execucoes.jsonl` (o registro completo de cada execução). `avaliacao/juiz.py` julga cada resposta com o Gemini, que recebe a pergunta, o gabarito e a resposta e tem acesso somente leitura ao servidor MCP; grava `juiz.csv` e `juiz.jsonl` com o veredito (correta, parcial ou incorreta), a justificativa e as consultas que fez.
+
 ## Estrutura
 
 | Pasta | Conteúdo |
@@ -67,7 +71,7 @@ python avaliacao/gabarito.py
 | `dados/` | recorte do dataset, esquema SQL e carga nos dois bancos |
 | `servidor/` | servidor MCP e sua validação |
 | `agentes/` | código comum (sessão MCP, modelo, medição, `answer()`) e um arquivo por sistema |
-| `avaliacao/` | as 20 perguntas, o gabarito e a checagem automática |
+| `avaliacao/` | as 20 perguntas, o gabarito, a checagem automática, o avaliador e o juiz |
 | `ambiente/` | instalação dos bancos, do servidor e do Ollama no Colab, e a preparação de uma sessão |
 | `notebooks/` | notebooks para rodar no Colab |
 | `resultados/` | evidências e resultados das execuções |
