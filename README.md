@@ -62,6 +62,8 @@ python avaliacao/juiz.py resultados --python-servidor <python com as libs de ser
 
 O juiz só usa a biblioteca padrão do Python; quem precisa das bibliotecas do servidor é o servidor MCP, que o Claude Code sobe com o `--python-servidor`. Se a cota da conta acabar, ele para; rodar de novo continua de onde parou.
 
+**6. A análise.** Com os arquivos em `resultados/`, abra [notebooks/04_analise.ipynb](notebooks/04_analise.ipynb) (runtime padrão, só CPU, ou localmente) e rode tudo. Ele monta a tabela comparativa, os gráficos (gravados em `resultados/graficos/`), os erros por pergunta, o roteamento, o verificador e a concordância entre juiz, revisão humana e checagem automática. A revisão humana é feita no `resultados/revisao_manual.csv`, que o próprio notebook cria: preencha a coluna `veredito_humano` e rode de novo.
+
 ## Avaliação
 
 `avaliacao/perguntas.py` tem as 20 perguntas, cada uma com categoria, banco, ferramenta esperada e a consulta de referência que calcula o gabarito direto nos bancos. Para ver as perguntas com o gabarito:
@@ -79,7 +81,7 @@ python avaliacao/gabarito.py
 | `dados/` | recorte do dataset, esquema SQL e carga nos dois bancos |
 | `servidor/` | servidor MCP e sua validação |
 | `agentes/` | código comum (sessão MCP, modelo, medição, `answer()`) e um arquivo por sistema |
-| `avaliacao/` | as 20 perguntas, o gabarito, a checagem automática, o avaliador e o juiz |
+| `avaliacao/` | as 20 perguntas, o gabarito, a checagem automática, o avaliador, o juiz e a análise |
 | `ambiente/` | instalação dos bancos, do servidor e do Ollama no Colab, e a preparação de uma sessão |
 | `notebooks/` | notebooks para rodar no Colab |
 | `resultados/` | evidências e resultados das execuções |
