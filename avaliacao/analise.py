@@ -79,6 +79,10 @@ def por_execucao(dados):
     df = dados["ex"].copy()
     df["checagem_ok"] = df["checagem_ok"].astype(bool)
     df["trajetoria_ok"] = df["trajetoria_ok"].astype(bool)
+    # checagem_ok junta conteúdo e trajetória; conteudo_ok olha só o texto da resposta (os padrões que devem e os que
+    # não podem aparecer), que é o que o juiz e o humano julgam
+    falhas = df["checagem_falhas"].fillna("").astype(str)
+    df["conteudo_ok"] = ~falhas.str.contains(r"faltou /|não devia ter /", regex=True)
     if dados["juiz"] is not None:
         final = dados["juiz"][dados["juiz"]["qual"] == "final"][["execucao", "veredito", "justificativa"]]
         df = df.merge(final.rename(columns={"veredito": "veredito_juiz", "justificativa": "justificativa_juiz"}),
@@ -115,6 +119,7 @@ def tabela_comparativa(df):
         "acerto (juiz)": g["acerto_juiz"].apply(_taxa),
         "acerto (humano)": g["acerto_humano"].apply(_taxa),
         "checagem automática": g["checagem_ok"].mean(),
+        "checagem só do conteúdo": g["conteudo_ok"].mean(),
         "trajetória": g["trajetoria_ok"].mean(),
         "latência média (s)": g["segundos"].mean(),
         "latência mediana (s)": g["segundos"].median(),
@@ -248,8 +253,9 @@ def kappa(a, b):
 
 def concordancia(df):
     """Concordância, em acerto (certo/errado), entre humano, juiz e checagem automática, só nas execuções que têm os
-    dois julgamentos comparados. Devolve a tabela de pares e as matrizes juiz × humano (com os 3 vereditos)."""
-    fontes = {"humano": df["acerto_humano"], "juiz": df["acerto_juiz"], "checagem": df["checagem_ok"].astype(object)}
+    dois julgamentos comparados. A checagem entra só pelo conteúdo (conteudo_ok), sem a trajetória, porque juiz e
+    humano julgam a resposta, não as ferramentas chamadas. Devolve a tabela de pares e as matrizes juiz × humano (com os 3 vereditos)."""
+    fontes = {"humano": df["acerto_humano"], "juiz": df["acerto_juiz"], "checagem": df["conteudo_ok"].astype(object)}
     linhas = []
     for x, y in [("juiz", "humano"), ("checagem", "humano"), ("checagem", "juiz")]:
         ok = fontes[x].notna() & fontes[y].notna()
@@ -295,7 +301,8 @@ def modelo_revisao(pasta, dados):
         "execucao": df["execucao"], "pergunta_id": df["pergunta_id"], "sistema": df["sistema"].astype(str),
         "categoria": df["categoria"], "pergunta": df["pergunta"],
         "gabarito": df["execucao"].map(lambda e: regs.get(e, {}).get("gabarito", "")),
-        "resposta": df["resposta"], "checagem_ok": df["checagem_ok"], "veredito_juiz": df["veredito_juiz"],
+        "resposta": df["resposta"], "conteudo_ok": df["conteudo_ok"],
+        "checagem_falhas": df["checagem_falhas"], "veredito_juiz": df["veredito_juiz"],
         "justificativa_juiz": df["justificativa_juiz"], "veredito_humano": "", "observacao": ""})
     m.to_csv(caminho, index=False, encoding="utf-8-sig")       # com BOM: o Excel abre os acentos certos
     return caminho, True

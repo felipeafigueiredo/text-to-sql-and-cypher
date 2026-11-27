@@ -1,0 +1,26 @@
+{
+  "commit": "510ca81 · Análise dos resultados e notebook 04",
+  "python": "3.13.16",
+  "gpu": "Tesla T4, 15360 MiB",
+  "cpus": 2,
+  "ram_gb": 12.7,
+  "ollama": "0.40.18",
+  "modelo": "qwen3:8b",
+  "parametros": "8.2B",
+  "quantizacao": "Q4_K_M",
+  "bibliotecas": {
+    "langgraph": "1.2.20",
+    "langchain-core": "1.7.4",
+    "langchain-ollama": "1.1.0",
+    "langchain-mcp-adapters": "0.3.2",
+    "mcp": "1.30.0"
+  },
+  "preparacao_s": {
+    "copiar o recorte": 7.3,
+    "bibliotecas dos agentes": 5.7,
+    "instalar e subir os bancos": 52.3,
+    "carregar os bancos": 142.5,
+    "instalar o servidor": 22.2,
+    "Ollama e o modelo": 90.4
+  }
+}

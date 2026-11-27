@@ -1,0 +1,24 @@
+,agente único,roteamento,verificador
+execuções,20.0,20.0,20.0
+acerto (final),0.55,0.4,0.7
+acerto (juiz),0.55,0.35,0.7
+acerto (humano),0.55,0.4,0.7
+checagem automática,0.45,0.35,0.6
+checagem só do conteúdo,0.55,0.4,0.7
+trajetória,0.75,0.75,0.85
+latência média (s),9.842,11.6075,20.803
+latência mediana (s),6.95,7.609999999999999,9.785
+latência p95 (s),32.53150000000001,47.626000000000005,71.542
+tokens entrada (média),6829.55,4871.15,14417.3
+tokens saída (média),216.15,262.45,404.5
+tokens total (soma),140914.0,102672.0,296436.0
+chamadas ao modelo (média),2.3,3.2,4.85
+chamadas a ferramentas (média),1.45,1.2,2.1
+CPU média (%),71.1255,74.913,70.9885
+RAM máx (GB),4.97,5.31,5.4
+GPU média (%),88.3775,88.3875,85.4705
+VRAM máx (GB),7.17,7.17,7.17
+consultas válidas,0.875,0.9333333333333333,0.8275862068965517
+tentativas até a 1ª válida (média),1.0,1.0714285714285714,1.2857142857142858
+limite de passos estourado,0.0,0.0,0.0
+erros de execução,0.0,0.0,0.0
