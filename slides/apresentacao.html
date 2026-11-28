@@ -80,7 +80,7 @@ body {
   font-family: var(--font-mono); font-size: 17px; letter-spacing: .14em; text-transform: uppercase;
   color: var(--muted); display: flex; align-items: center; gap: 14px;
 }
-.label::before { content: ""; width: 28px; height: 1px; background: currentColor; opacity: .6; }
+.label::before { content: ""; flex: none; width: 28px; height: 1px; background: currentColor; opacity: .6; }
 h1, h2, h3, p { margin: 0; }
 h1 { font-size: 88px; line-height: 1.02; font-weight: 500; letter-spacing: -.035em; text-wrap: balance; }
 h2 { font-size: 58px; line-height: 1.08; font-weight: 500; letter-spacing: -.028em; text-wrap: balance; max-width: 1240px; }
@@ -241,9 +241,9 @@ svg .draw { stroke-dasharray: 400; stroke-dashoffset: 400; transition: stroke-da
 <!-- 1 · Capa -->
 <section class="slide cover is-active" data-section="Abertura">
   <div class="text">
-    <div class="label r">DCA0305 · UFRN · Trabalho 2</div>
+    <div class="label r" style="white-space:nowrap">UFRN - DCA0305 - Projeto de sistemas baseados em aprendizado de máquina</div>
     <h1 class="r">Perguntas em português,<br>respostas de dois bancos</h1>
-    <p class="lead r">Agentes de LLM que consultam um banco relacional e um banco de grafos por um servidor MCP, comparados com medições.</p>
+    <p class="lead r">Agentes de IA que consultam um banco relacional e um banco orientado a grafos por um servidor MCP, comparados com medições.</p>
     <div class="authors r">Daniel Soares · Felipe Augusto · Gabriel Uchoa</div>
   </div>
   <svg class="art r" viewBox="0 0 520 520" role="img" aria-label="Pinheiros e os seis bairros que fazem divisa com ele">
