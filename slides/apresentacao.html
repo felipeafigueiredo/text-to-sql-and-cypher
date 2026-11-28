@@ -1,0 +1,1078 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Text-to-SQL e Cypher</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: palco 16:9 de 1600×900 escalado para a janela; cada slide é uma folha com muito ar,
+   rótulo da seção em mono no topo, uma ideia por tela. Cor só para os sistemas e para o destaque. */
+:root {
+  --bg: #f4f6f7;
+  --surface: #ffffff;
+  --fg: #14191d;
+  --muted: #5d676e;
+  --faint: #8b959c;
+  --line: #dde2e5;
+  --accent: #2743c4;
+  --accent-soft: #e6eafb;
+  --s1: #8a97a3;
+  --s2: #c2823a;
+  --s3: #2743c4;
+  --ok: #1f7a52;
+  --warn: #b0731d;
+  --bad: #b23a3a;
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1214; --surface: #161a1d; --fg: #e7ebee; --muted: #9aa4ab; --faint: #6c767d; --line: #272d31;
+    --accent: #8299f6; --accent-soft: #1b2342; --s1: #7d8995; --s2: #d79d5c; --s3: #8299f6;
+    --ok: #5cbf8f; --warn: #d9a352; --bad: #e07a7a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1214; --surface: #161a1d; --fg: #e7ebee; --muted: #9aa4ab; --faint: #6c767d; --line: #272d31;
+  --accent: #8299f6; --accent-soft: #1b2342; --s1: #7d8995; --s2: #d79d5c; --s3: #8299f6;
+  --ok: #5cbf8f; --warn: #d9a352; --bad: #e07a7a; color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body {
+  margin: 0; overflow: hidden; background: var(--bg); color: var(--fg);
+  font-family: var(--font-sans); font-size: 14px;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* ---------- palco ---------- */
+.viewport { position: fixed; inset: 0; overflow: hidden; }
+.stage {
+  position: absolute; left: 50%; top: 50%; width: 1600px; height: 900px;
+  transform: translate(-50%, -50%) scale(var(--scale, .5)); transform-origin: center;
+}
+.slide {
+  position: absolute; inset: 0; padding: 92px 128px 100px;
+  display: flex; flex-direction: column; gap: 40px;
+  opacity: 0; visibility: hidden; transform: translateY(18px);
+  transition: opacity .55s var(--ease), transform .7s var(--ease), visibility 0s linear .7s;
+}
+.slide.is-past { transform: translateY(-18px); }
+.slide.is-active {
+  opacity: 1; visibility: visible; transform: none;
+  transition: opacity .55s var(--ease) .08s, transform .7s var(--ease) .08s, visibility 0s;
+}
+.slide .r { opacity: 0; transform: translateY(10px); transition: opacity .5s var(--ease), transform .6s var(--ease); }
+.slide.is-active .r {
+  opacity: 1; transform: none;
+  transition-delay: calc(.18s + var(--d, 0) * .07s);
+}
+
+/* ---------- tipografia ---------- */
+.label {
+  font-family: var(--font-mono); font-size: 17px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--muted); display: flex; align-items: center; gap: 14px;
+}
+.label::before { content: ""; width: 28px; height: 1px; background: currentColor; opacity: .6; }
+h1, h2, h3, p { margin: 0; }
+h1 { font-size: 88px; line-height: 1.02; font-weight: 500; letter-spacing: -.035em; text-wrap: balance; }
+h2 { font-size: 58px; line-height: 1.08; font-weight: 500; letter-spacing: -.028em; text-wrap: balance; max-width: 1240px; }
+h3 { font-size: 27px; line-height: 1.25; font-weight: 500; letter-spacing: -.01em; }
+p, li { font-size: 26px; line-height: 1.5; color: var(--muted); }
+.lead { font-size: 30px; line-height: 1.45; color: var(--muted); max-width: 1100px; text-wrap: pretty; }
+.small { font-size: 21px; line-height: 1.5; color: var(--muted); }
+.mono { font-family: var(--font-mono); }
+.fg { color: var(--fg); }
+.acc { color: var(--accent); }
+strong { color: var(--fg); font-weight: 500; }
+ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 14px; }
+.num { font-variant-numeric: tabular-nums; }
+code, .code-inline {
+  font-family: var(--font-mono); font-size: .86em; color: var(--fg);
+  background: var(--accent-soft); padding: .08em .36em; border-radius: 6px;
+}
+.spacer { flex: 1; }
+
+/* ---------- componentes ---------- */
+.grid { display: grid; gap: 40px; }
+.g2 { grid-template-columns: 1fr 1fr; }
+.g3 { grid-template-columns: repeat(3, 1fr); }
+.g4 { grid-template-columns: repeat(4, 1fr); }
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.rule { border-top: 1px solid var(--line); padding-top: 22px; }
+.tag {
+  font-family: var(--font-mono); font-size: 15px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+}
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 30px 34px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 15px;
+  letter-spacing: .06em; text-transform: uppercase; padding: 6px 12px; border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.pill.ok { color: var(--ok); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); }
+.dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex: none; }
+.d1 { background: var(--s1); } .d2 { background: var(--s2); } .d3 { background: var(--s3); }
+
+pre.code {
+  margin: 0; font-family: var(--font-mono); font-size: 21px; line-height: 1.6; color: var(--fg);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 24px 28px;
+  white-space: pre-wrap; overflow: hidden;
+}
+pre.code .k { color: var(--accent); }
+pre.code .s { color: var(--s2); }
+pre.code .c { color: var(--faint); }
+.result {
+  display: flex; align-items: baseline; gap: 16px; font-size: 22px; color: var(--muted);
+}
+.result b { font-family: var(--font-mono); font-weight: 500; font-size: 44px; color: var(--fg); letter-spacing: -.02em; }
+
+.stat b {
+  display: block; font-size: 64px; font-weight: 400; letter-spacing: -.035em; color: var(--fg);
+  font-variant-numeric: tabular-nums; line-height: 1.05;
+}
+.stat span { font-size: 21px; color: var(--muted); }
+
+table.t { border-collapse: collapse; width: 100%; font-size: 23px; }
+table.t th { text-align: left; font-family: var(--font-mono); font-weight: 400; font-size: 15px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 0 0 14px; border-bottom: 1px solid var(--line); }
+table.t td { padding: 15px 0; border-bottom: 1px solid var(--line); color: var(--muted); vertical-align: top; }
+table.t td:first-child { color: var(--fg); }
+table.t td.n, table.t th.n { text-align: right; font-variant-numeric: tabular-nums; }
+table.t tr:last-child td { border-bottom: 0; }
+table.t td + td, table.t th + th { padding-left: 20px; }
+table.t td.acc { color: var(--accent); }
+
+/* diagrama de fluxo */
+.flow { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.box {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 10px;
+  padding: 14px 20px; font-size: 22px; color: var(--fg); white-space: nowrap;
+}
+.box .small { white-space: normal; margin-top: 4px; line-height: 1.35; }
+.box.new { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.box.ghost { background: transparent; border-style: dashed; color: var(--muted); }
+.arrow { color: var(--faint); font-family: var(--font-mono); font-size: 22px; }
+
+/* barras horizontais */
+.hbars { display: grid; gap: 30px; }
+.hbar { display: grid; grid-template-columns: 250px 1fr 110px; align-items: center; gap: 24px; }
+.hbar .name { font-size: 25px; color: var(--fg); display: flex; align-items: center; gap: 12px; }
+.hbar .track { height: 18px; background: var(--line); border-radius: 999px; overflow: hidden; }
+.hbar .fill {
+  height: 100%; width: var(--w); border-radius: 999px; transform: scaleX(0); transform-origin: left;
+  transition: transform 1s var(--ease);
+}
+.slide.is-active .hbar .fill { transform: scaleX(1); transition-delay: calc(.35s + var(--d, 0) * .1s); }
+.hbar .val { font-size: 40px; font-weight: 400; letter-spacing: -.02em; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* svg */
+svg text { font-family: var(--font-mono); fill: var(--muted); }
+svg.chart text { font-size: 17px; }
+svg.chart text[fill="var(--fg)"] { font-size: 19px; }
+svg .gridline { stroke: var(--line); stroke-width: 1; }
+svg .axis { stroke: var(--faint); stroke-width: 1; }
+svg .grow { transform-box: fill-box; transform-origin: bottom; transform: scaleY(0); transition: transform .9s var(--ease); }
+.slide.is-active svg .grow { transform: scaleY(1); transition-delay: calc(.35s + var(--d, 0) * .06s); }
+svg .pop { opacity: 0; transition: opacity .5s var(--ease); }
+.slide.is-active svg .pop { opacity: 1; transition-delay: calc(.5s + var(--d, 0) * .08s); }
+svg .draw { stroke-dasharray: 400; stroke-dashoffset: 400; transition: stroke-dashoffset 1.4s var(--ease); }
+.slide.is-active svg .draw { stroke-dashoffset: 0; transition-delay: calc(.3s + var(--d, 0) * .09s); }
+
+/* capa */
+.cover { flex-direction: row; align-items: center; gap: 60px; }
+.cover .text { flex: 1; display: flex; flex-direction: column; gap: 36px; min-width: 0; }
+.cover .art { width: 520px; flex: none; }
+.authors { font-family: var(--font-mono); font-size: 19px; letter-spacing: .08em; color: var(--muted); }
+
+/* barra de controle */
+.bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  display: flex; align-items: center; gap: 18px;
+  padding: 0 max(20px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; color: var(--faint);
+}
+.bar .progress { flex: 1; height: 1px; background: var(--line); position: relative; }
+.bar .progress i { position: absolute; left: 0; top: 0; height: 1px; background: var(--fg); width: 0; transition: width .6s var(--ease); }
+.bar button {
+  font: inherit; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 999px;
+  width: 30px; height: 30px; display: grid; place-items: center; cursor: pointer; transition: color .2s, border-color .2s;
+}
+.bar button:hover { color: var(--fg); border-color: var(--faint); }
+.bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bar .hint { transition: opacity .6s; white-space: nowrap; }
+.bar .hint.gone { opacity: 0; }
+.bar .count { font-variant-numeric: tabular-nums; min-width: 56px; text-align: right; color: var(--muted); }
+
+.notes { display: none; }
+.notes-panel {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; max-height: 34vh; overflow: auto;
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding: 18px max(24px, env(safe-area-inset-right, 0px)) calc(54px + env(safe-area-inset-bottom, 0px)) max(24px, env(safe-area-inset-left, 0px));
+  font-size: 16px; line-height: 1.6; color: var(--fg);
+  transform: translateY(100%); transition: transform .4s var(--ease);
+}
+.notes-panel.open { transform: none; }
+.notes-panel .nh { font-family: var(--font-mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.notes-panel p { font-size: 16px; color: var(--fg); max-width: 80ch; }
+.notes-panel p + p { margin-top: 8px; }
+
+@media (max-width: 640px) { .bar .hint { display: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .slide, .slide.is-active, .slide .r, .slide.is-active .r, .hbar .fill, svg .grow, svg .pop, svg .draw, .notes-panel, .bar .progress i {
+    transition: none !important;
+  }
+  .slide { transform: none !important; }
+  .hbar .fill, svg .grow { transform: none; }
+  svg .draw { stroke-dashoffset: 0; }
+  svg .pop { opacity: 1; }
+}
+</style>
+</head>
+<body>
+<div class="viewport">
+<main class="stage" id="stage">
+
+<!-- 1 · Capa -->
+<section class="slide cover is-active" data-section="Abertura">
+  <div class="text">
+    <div class="label r">DCA0305 · UFRN · Trabalho 2</div>
+    <h1 class="r">Perguntas em português,<br>respostas de dois bancos</h1>
+    <p class="lead r">Agentes de LLM que consultam um banco relacional e um banco de grafos por um servidor MCP, comparados com medições.</p>
+    <div class="authors r">Daniel Soares · Felipe Augusto · Gabriel Uchoa</div>
+  </div>
+  <svg class="art r" viewBox="0 0 520 520" role="img" aria-label="Pinheiros e os seis bairros que fazem divisa com ele">
+    <g stroke="var(--faint)" stroke-width="1.2" fill="none">
+      <line class="draw" style="--d:0" x1="260" y1="270" x2="150" y2="150"/>
+      <line class="draw" style="--d:1" x1="260" y1="270" x2="330" y2="110"/>
+      <line class="draw" style="--d:2" x1="260" y1="270" x2="440" y2="235"/>
+      <line class="draw" style="--d:3" x1="260" y1="270" x2="400" y2="390"/>
+      <line class="draw" style="--d:4" x1="260" y1="270" x2="190" y2="430"/>
+      <line class="draw" style="--d:5" x1="260" y1="270" x2="88" y2="305"/>
+    </g>
+    <g class="pop" style="--d:2">
+      <circle cx="150" cy="150" r="7" fill="var(--bg)" stroke="var(--muted)" stroke-width="1.5"/>
+      <circle cx="330" cy="110" r="7" fill="var(--bg)" stroke="var(--muted)" stroke-width="1.5"/>
+      <circle cx="440" cy="235" r="7" fill="var(--bg)" stroke="var(--muted)" stroke-width="1.5"/>
+      <circle cx="400" cy="390" r="7" fill="var(--bg)" stroke="var(--muted)" stroke-width="1.5"/>
+      <circle cx="190" cy="430" r="7" fill="var(--bg)" stroke="var(--muted)" stroke-width="1.5"/>
+      <circle cx="88" cy="305" r="7" fill="var(--bg)" stroke="var(--muted)" stroke-width="1.5"/>
+      <text x="150" y="128" font-size="14" text-anchor="middle">Alto de Pinheiros</text>
+      <text x="330" y="88" font-size="14" text-anchor="middle">Perdizes</text>
+      <text x="440" y="213" font-size="14" text-anchor="middle">Jardim Paulista</text>
+      <text x="400" y="420" font-size="14" text-anchor="middle">Itaim Bibi</text>
+      <text x="190" y="460" font-size="14" text-anchor="middle">Morumbi</text>
+      <text x="88" y="335" font-size="14" text-anchor="middle">Butantã</text>
+    </g>
+    <circle class="pop" style="--d:0" cx="260" cy="270" r="11" fill="var(--accent)"/>
+    <text class="pop" style="--d:0" x="282" y="276" font-size="16" fill="var(--fg)">Pinheiros</text>
+  </svg>
+  <aside class="notes">
+    <p>Bloco 1 · 0:30. Apresentar o grupo e a disciplina.</p>
+    <p>O desenho é Pinheiros e os seis bairros que fazem divisa com ele. É o exemplo que vai voltar ao longo da apresentação.</p>
+  </aside>
+</section>
+
+<!-- 2 · Pergunta-guia -->
+<section class="slide" data-section="Abertura">
+  <div class="label r">A pergunta deste trabalho</div>
+  <div class="spacer"></div>
+  <h1 class="r" style="font-size:76px;max-width:1260px">Vale a pena usar mais de um agente para consultar bancos de dados em linguagem natural?</h1>
+  <p class="lead r">Três sistemas, com o mesmo modelo, as mesmas ferramentas e as mesmas 20 perguntas.</p>
+  <div class="spacer"></div>
+  <aside class="notes">
+    <p>Fazer a pergunta e dizer que ela será respondida no fim, com números.</p>
+    <p>Um agente único e duas arquiteturas multiagente. Tudo igual entre eles, menos a arquitetura.</p>
+  </aside>
+</section>
+
+<!-- 3 · Problema -->
+<section class="slide" data-section="Problema">
+  <div class="label r">O problema</div>
+  <h2 class="r">A consulta roda. A resposta está errada.</h2>
+  <p class="lead r" style="font-size:26px">“Quantas avaliações o anúncio <span class="fg">Studio at Copan with a view</span> recebeu em 2025?”</p>
+  <div class="grid g2" style="gap:36px">
+    <div class="col r">
+      <div class="tag">Roda sem erro</div>
+      <pre class="code"><span class="k">SELECT</span> number_of_reviews
+<span class="k">FROM</span> listing
+<span class="k">WHERE</span> name = <span class="s">'Studio at Copan with a view'</span>;</pre>
+      <div class="result"><b>742</b> conta a vida toda do anúncio</div>
+    </div>
+    <div class="col r">
+      <div class="tag acc">Responde à pergunta</div>
+      <pre class="code"><span class="k">SELECT</span> count(*) <span class="k">FROM</span> review r
+<span class="k">JOIN</span> listing l <span class="k">USING</span> (listing_id)
+<span class="k">WHERE</span> l.name = <span class="s">'Studio at Copan with a view'</span>
+  <span class="k">AND</span> r.date <span class="k">BETWEEN</span> <span class="s">'2025-01-01'</span> <span class="k">AND</span> <span class="s">'2025-12-31'</span>;</pre>
+      <div class="result"><b class="acc">40</b> avaliações em 2025</div>
+    </div>
+  </div>
+  <p class="small r">O banco avisa quando a sintaxe está errada. Quando o sentido está errado, ninguém avisa.</p>
+  <aside class="notes">
+    <p>Bloco 2 · 1:30. Text-to-SQL e text-to-Cypher: a pergunta em português vira uma consulta.</p>
+    <p>Esta é a P04 da nossa avaliação. Os três sistemas responderam 742. A dificuldade do problema é essa: errar o sentido, não a sintaxe.</p>
+  </aside>
+</section>
+
+<!-- 4 · Dois tipos de pergunta -->
+<section class="slide" data-section="Problema">
+  <div class="label r">O problema</div>
+  <h2 class="r">Dois tipos de pergunta, dois tipos de banco</h2>
+  <div class="grid g3" style="margin-top:10px">
+    <div class="col rule r">
+      <div class="tag">Atributo e número</div>
+      <h3>“Quantos anúncios com piscina custam menos de R$ 300 por noite?”</h3>
+      <p class="small">Filtrar, contar, somar. O <strong>SQL</strong> responde bem.</p>
+    </div>
+    <div class="col rule r">
+      <div class="tag">Relação</div>
+      <h3>“Quais bairros fazem divisa com Pinheiros?”</h3>
+      <p class="small">Seguir ligações entre coisas. O <strong>grafo</strong> responde bem.</p>
+    </div>
+    <div class="col rule r" style="border-top-color:var(--accent)">
+      <div class="tag acc">As duas</div>
+      <h3>“O preço médio dos vizinhos de Pinheiros é maior ou menor que o de Pinheiros?”</h3>
+      <p class="small">O grafo acha os vizinhos; o SQL calcula o preço. Precisa dos <strong>dois bancos</strong>.</p>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <p class="small r">A terceira é a P15. Ela vai nos acompanhar até o resultado.</p>
+  <aside class="notes">
+    <p>Dados de hospedagem têm as duas formas de pergunta, e algumas precisam dos dois bancos.</p>
+    <p>Apresentar a P15 como o exemplo que volta em cada parte.</p>
+  </aside>
+</section>
+
+<!-- 5 · Dados -->
+<section class="slide" data-section="Dados">
+  <div class="label r">Os dados</div>
+  <h2 class="r">Inside Airbnb, São Paulo</h2>
+  <p class="lead r" style="font-size:26px">Coleta de setembro de 2026: anúncios, avaliações e os polígonos dos 96 distritos. Todos os anúncios da cidade e as avaliações de 2025 em diante.</p>
+  <div class="grid g3" style="row-gap:52px;margin-top:16px">
+    <div class="stat r"><b>44.080</b><span>anúncios</span></div>
+    <div class="stat r"><b>15.883</b><span>anfitriões</span></div>
+    <div class="stat r"><b>933.607</b><span>avaliações, de jan/2025 a set/2026</span></div>
+    <div class="stat r"><b>651.156</b><span>hóspedes</span></div>
+    <div class="stat r"><b>96</b><span>bairros</span></div>
+    <div class="stat r"><b class="acc">235</b><span>pares de bairros vizinhos, calculados dos polígonos</span></div>
+  </div>
+  <div class="spacer"></div>
+  <p class="small r">Preço, 7 notas, capacidade, ocupação e receita estimadas, datas e 167 comodidades. Licença CC BY 4.0.</p>
+  <aside class="notes">
+    <p>Bloco 3 · 2:00. Por que este dataset: dados reais e brasileiros, com muitos atributos numéricos e relações reais.</p>
+    <p>O texto das avaliações não foi guardado: nenhuma pergunta numérica precisa dele.</p>
+  </aside>
+</section>
+
+<!-- 6 · Divisão entre os bancos -->
+<section class="slide" data-section="Dados">
+  <div class="label r">Os dados</div>
+  <h2 class="r">Cada pergunta tem um banco certo</h2>
+  <div class="grid" style="grid-template-columns:1fr 220px 1fr;gap:32px;align-items:stretch">
+    <div class="panel col r">
+      <div class="tag">PostgreSQL · atributos e números</div>
+      <table class="t" style="font-size:21px">
+        <tr><td class="mono">listing</td><td>preço, notas, capacidade</td><td class="n">44.080</td></tr>
+        <tr><td class="mono">listing_amenity</td><td>comodidades</td><td class="n">1.251.474</td></tr>
+        <tr><td class="mono">review</td><td>quem, qual anúncio, data</td><td class="n">933.607</td></tr>
+        <tr><td class="mono">host · guest</td><td>anfitriões e hóspedes</td><td class="n">667.039</td></tr>
+        <tr><td class="mono">neighbourhood</td><td>bairro e subprefeitura</td><td class="n">96</td></tr>
+      </table>
+    </div>
+    <div class="col r" style="justify-content:center;align-items:center;text-align:center;gap:12px">
+      <div class="tag">Chaves em comum</div>
+      <div class="mono small fg" style="line-height:1.8">listing_id<br>host_id<br>guest_id<br>nome do bairro</div>
+    </div>
+    <div class="panel col r">
+      <div class="tag">Neo4j · relações</div>
+      <table class="t" style="font-size:21px">
+        <tr><td class="mono">HOSTS</td><td>anfitrião → anúncio</td><td class="n">44.080</td></tr>
+        <tr><td class="mono">LOCATED_IN</td><td>anúncio → bairro</td><td class="n">44.080</td></tr>
+        <tr><td class="mono">REVIEWED</td><td>hóspede → anúncio</td><td class="n">899.238</td></tr>
+        <tr><td class="mono acc">BORDERS</td><td class="acc">bairro — bairro</td><td class="n acc">235</td></tr>
+      </table>
+    </div>
+  </div>
+  <p class="small r" style="max-width:1300px">Números só no SQL. Vizinhança só no grafo. Por isso o preço médio dos vizinhos de Pinheiros precisa dos dois, e o roteamento tem uma resposta certa que dá para medir.</p>
+  <aside class="notes">
+    <p>Esta é a decisão central do projeto. O grafo não tem preço; o SQL não tem vizinhança.</p>
+    <p>“Quem anuncia o quê” e “quem avaliou o quê” existem nos dois bancos.</p>
+  </aside>
+</section>
+
+<!-- 7 · Armadilhas -->
+<section class="slide" data-section="Dados">
+  <div class="label r">Os dados</div>
+  <h2 class="r">Armadilhas que já vêm nos dados</h2>
+  <div class="grid g2" style="gap:56px 80px;margin-top:8px">
+    <div class="col rule r">
+      <div class="tag">Valores em inglês</div>
+      <h3>“piscina” → <code>'Pool'</code> · “imóvel inteiro” → <code>'Entire home/apt'</code></h3>
+      <p class="small">A pergunta é em português; o dado, não.</p>
+    </div>
+    <div class="col rule r">
+      <div class="tag">Bairros sem acento</div>
+      <h3><code>'Republica'</code> · <code>'Butanta'</code> · <code>'Consolacao'</code></h3>
+      <p class="small">Busca exata pelo nome escrito certo volta vazia.</p>
+    </div>
+    <div class="col rule r">
+      <div class="tag">Contador da vida toda</div>
+      <h3><code>number_of_reviews</code> = 742, mas 40 avaliações em 2025</h3>
+      <p class="small">O campo conta desde a criação do anúncio; o recorte começa em 2025.</p>
+    </div>
+    <div class="col rule r">
+      <div class="tag">Contador do Airbnb inteiro</div>
+      <h3>Seazone: 3.435 anúncios no Airbnb, 209 em São Paulo</h3>
+      <p class="small">“Quantos anúncios a Seazone tem?” tem duas respostas.</p>
+    </div>
+  </div>
+  <aside class="notes">
+    <p>Não criamos essas armadilhas: elas vêm do Inside Airbnb. Usamos as duas últimas nas perguntas capciosas (P04 e P18).</p>
+  </aside>
+</section>
+
+<!-- 8 · Ambiente e modelo -->
+<section class="slide" data-section="Ambiente">
+  <div class="label r">Ambiente e modelo</div>
+  <h2 class="r">Tudo numa sessão do Colab, com um modelo local</h2>
+  <div class="grid" style="grid-template-columns:420px 1fr;gap:80px">
+    <div class="col r">
+      <table class="t">
+        <tr><th colspan="2">Na sessão</th></tr>
+        <tr><td>GPU</td><td>Tesla T4, 15 GB</td></tr>
+        <tr><td>Relacional</td><td>PostgreSQL 16</td></tr>
+        <tr><td>Grafo</td><td>Neo4j 5.26</td></tr>
+        <tr><td>Modelo</td><td class="mono">qwen3:8b · Q4_K_M</td></tr>
+        <tr><td>Execução</td><td>Ollama 0.40</td></tr>
+        <tr><td>Agentes</td><td>LangGraph 1.2</td></tr>
+      </table>
+    </div>
+    <div class="col" style="gap:26px">
+      <div class="tag r">Escolhas, cada uma com um motivo medido</div>
+      <div class="rule r"><h3>Temperatura 0 e semente fixa</h3><p class="small">A mesma entrada dá a mesma saída, e a rodada pode ser repetida.</p></div>
+      <div class="rule r"><h3>Sem o modo de raciocínio</h3><p class="small">Com ele, cada chamada ao modelo ficava muito mais lenta.</p></div>
+      <div class="rule r"><h3>Contexto de 16.384 tokens</h3><p class="small">Com 8.192, os dois esquemas e os resultados estouravam o contexto, e o Ollama cortava o prompt de sistema sem avisar.</p></div>
+      <div class="rule r"><h3>Neo4j</h3><p class="small">Modelos pequenos escrevem Cypher no dialeto do Neo4j.</p></div>
+    </div>
+  </div>
+  <aside class="notes">
+    <p>Bloco 4 · 1:00. Sem Docker: bancos, servidor e modelo instalados na própria sessão.</p>
+    <p>O qwen3:8b é o modelo local da disciplina, chama ferramentas e cabe na T4.</p>
+  </aside>
+</section>
+
+<!-- 9 · Servidor MCP -->
+<section class="slide" data-section="Servidor MCP">
+  <div class="label r">Servidor MCP</div>
+  <h2 class="r">Todo acesso aos bancos passa pelo servidor</h2>
+  <div class="grid" style="grid-template-columns:230px 40px 1fr 40px 260px;gap:20px;align-items:center">
+    <div class="col r" style="gap:14px">
+      <div class="box">Agente único</div>
+      <div class="box">Roteamento</div>
+      <div class="box">Verificador</div>
+      <div class="box ghost">Juiz</div>
+    </div>
+    <div class="arrow r" style="text-align:center">⇄</div>
+    <div class="panel col r" style="gap:12px;padding:26px 32px">
+      <div class="tag">FastMCP · stdio · somente leitura</div>
+      <table class="t" style="font-size:20px">
+        <tr><td class="mono">consultar_sql</td><td>SELECT no PostgreSQL</td></tr>
+        <tr><td class="mono">consultar_grafo</td><td>Cypher no Neo4j, com avisos</td></tr>
+        <tr><td class="mono">buscar_entidade</td><td>acha pelo nome, sem diferenciar acentos</td></tr>
+        <tr><td class="mono">detalhes_anuncio</td><td>todos os dados de um anúncio</td></tr>
+        <tr><td class="mono acc">comparar_anuncios</td><td>compara de 2 a 5 e calcula o vencedor</td></tr>
+      </table>
+      <div class="small" style="font-size:18px;display:flex;gap:28px;flex-wrap:wrap">
+        <span><span class="tag">Resources</span> <span class="mono fg">esquema://sql · esquema://grafo</span></span>
+        <span><span class="tag">Prompt</span> <span class="mono fg">analisar_bairro</span></span>
+      </div>
+    </div>
+    <div class="arrow r" style="text-align:center">⇄</div>
+    <div class="col r" style="gap:14px">
+      <div class="box">PostgreSQL<div class="small" style="font-size:16px">usuário só leitura, tempo máximo por consulta</div></div>
+      <div class="box">Neo4j<div class="small" style="font-size:16px">só leitura</div></div>
+    </div>
+  </div>
+  <p class="small r">As mesmas ferramentas servem aos três sistemas e ao juiz.</p>
+  <aside class="notes">
+    <p>Bloco 5 · 2:30. Cinco ferramentas, dois resources e um prompt. A comparar_anuncios é a ferramenta de cálculo: a comparação não depende de conta feita pelo modelo.</p>
+    <p>A escrita é bloqueada na ferramenta e no próprio banco.</p>
+  </aside>
+</section>
+
+<!-- 10 · Regras do servidor -->
+<section class="slide" data-section="Servidor MCP">
+  <div class="label r">Servidor MCP</div>
+  <h2 class="r">Cada regra do servidor veio de uma falha observada</h2>
+  <table class="t r" style="font-size:22px">
+    <tr><th style="width:46%">O que o modelo fez</th><th>O que o servidor passou a fazer</th></tr>
+    <tr><td>Recebeu uma lista cortada em 50 linhas e contou 48 em vez de 164</td><td>Toda consulta devolve o total de linhas e se o resultado foi cortado</td></tr>
+    <tr><td>Reenviou a mesma consulta errada 4 vezes</td><td>O erro vem com uma dica do que corrigir, e reenviar a consulta que acabou de falhar é recusado</td></tr>
+    <tr><td>Escreveu <code>BORDERS</code> com seta e recebeu um resultado vazio, sem aviso</td><td>Avisa quando a relação de vizinhança vem com direção</td></tr>
+    <tr><td>Buscou a Seazone como bairro e concluiu que ela não existe</td><td>Uma busca vazia procura o termo nos outros tipos e diz onde achou</td></tr>
+  </table>
+  <div class="spacer"></div>
+  <div class="flow r" style="gap:48px">
+    <div class="stat"><b class="acc">57 / 57</b><span>casos da validação sem LLM</span></div>
+    <p class="small" style="max-width:760px">Erros voltam como erro de execução, para o modelo se recuperar dentro do próprio loop.</p>
+  </div>
+  <aside class="notes">
+    <p>O servidor não foi desenhado no papel: cada uma dessas regras veio de um teste com o modelo.</p>
+    <p>Nenhuma regra entrega a resposta de uma pergunta da avaliação.</p>
+  </aside>
+</section>
+
+<!-- 11 · Arquiteturas -->
+<section class="slide" data-section="Arquiteturas">
+  <div class="label r">Arquiteturas</div>
+  <h2 class="r">Três sistemas, e cada um muda uma coisa só</h2>
+  <div class="col" style="gap:34px;margin-top:6px">
+    <div class="grid r" style="grid-template-columns:260px 1fr;align-items:center">
+      <div class="name" style="display:flex;align-items:center;gap:12px;font-size:26px"><span class="dot d1"></span>Agente único</div>
+      <div class="flow"><div class="box ghost">pergunta</div><span class="arrow">→</span><div class="box">modelo ⇄ 5 ferramentas</div><span class="arrow">→</span><div class="box ghost">resposta</div></div>
+    </div>
+    <div class="grid r" style="grid-template-columns:260px 1fr;align-items:center">
+      <div class="name" style="display:flex;align-items:center;gap:12px;font-size:26px"><span class="dot d2"></span>Roteamento</div>
+      <div class="flow"><div class="box ghost">pergunta</div><span class="arrow">→</span><div class="box new">roteador</div><span class="arrow">→</span><div class="box new">especialista SQL · especialista grafo</div><span class="arrow">→</span><div class="box ghost">resposta</div></div>
+    </div>
+    <div class="grid r" style="grid-template-columns:260px 1fr;align-items:center">
+      <div class="name" style="display:flex;align-items:center;gap:12px;font-size:26px"><span class="dot d3"></span>Verificador</div>
+      <div class="flow"><div class="box ghost">pergunta</div><span class="arrow">→</span><div class="box">agente único</div><span class="arrow">→</span><div class="box new">verificador</div><span class="arrow">→</span><div class="box ghost">resposta</div><span class="arrow" style="margin-left:10px">↺ devolve até 2 vezes</span></div>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="grid g2 r" style="gap:60px">
+    <p class="small">Mesmo modelo, mesmas ferramentas, mesmo framework e a mesma interface <code>answer(pergunta)</code>, que devolve a resposta e as medições.</p>
+    <p class="small">Ficaram de fora a paralelização (uma etapa depende do resultado da outra) e o supervisor (um roteamento com mais voltas e mais custo).</p>
+  </div>
+  <aside class="notes">
+    <p>Bloco 6 · 3:00. As duas multiagente são construídas sobre o agente único. Em destaque, o que cada uma acrescenta.</p>
+    <p>Assim, a diferença no resultado é efeito do padrão, e não de outra mudança.</p>
+  </aside>
+</section>
+
+<!-- 12 · Roteamento -->
+<section class="slide" data-section="Arquiteturas">
+  <div class="label r"><span class="dot d2" style="margin-right:2px"></span>Roteamento</div>
+  <h2 class="r">Decidir o banco antes de consultar</h2>
+  <div class="grid g3" style="gap:56px">
+    <div class="col rule r"><div class="tag">A falha que motivou</div><p>Nos primeiros testes, o agente único ignorava o grafo nas perguntas híbridas.</p></div>
+    <div class="col rule r" style="border-top-color:var(--s2)"><div class="tag">Hipótese</div><p class="fg">Com o banco decidido antes, cada especialista recebe um esquema só. Com menos contexto, ele escreve consultas melhores.</p></div>
+    <div class="col rule r"><div class="tag">Como funciona</div><p>O roteador escolhe <code>sql</code>, <code>cypher</code>, <code>ambos</code> ou <code>fora_do_escopo</code>, em saída estruturada.</p></div>
+  </div>
+  <div class="spacer"></div>
+  <div class="flow r">
+    <div class="tag" style="margin-right:12px">Em “ambos”</div>
+    <div class="box">especialista grafo</div><span class="arrow">→ vizinhos →</span><div class="box">especialista SQL</div><span class="arrow">→ calcula e responde</span>
+  </div>
+  <p class="small r">Fora do escopo: uma recusa fixa, sem chamar o modelo nem as ferramentas.</p>
+  <aside class="notes">
+    <p>O roteador não vê os esquemas, só uma descrição curta de cada banco e seis exemplos que não são perguntas da avaliação.</p>
+  </aside>
+</section>
+
+<!-- 13 · Verificador -->
+<section class="slide" data-section="Arquiteturas">
+  <div class="label r"><span class="dot d3" style="margin-right:2px"></span>Verificador</div>
+  <h2 class="r">Um segundo olhar sobre o sentido da resposta</h2>
+  <div class="grid g3" style="gap:56px">
+    <div class="col rule r"><div class="tag">A falha que motivou</div><p>Nos primeiros testes, nenhum erro foi de sintaxe. Todos foram de sentido: a consulta rodava e devolvia o número errado.</p></div>
+    <div class="col rule r" style="border-top-color:var(--s3)"><div class="tag">Hipótese</div><p class="fg">Conferir se as consultas respondem à pergunta e se a resposta bate com os resultados pega o que o loop de correção não pega.</p></div>
+    <div class="col rule r"><div class="tag">Como funciona</div><p>Recebe a pergunta, as consultas com os resultados e a resposta. Aprova, ou devolve com uma objeção e a evidência.</p></div>
+  </div>
+  <div class="spacer"></div>
+  <div class="grid g2 r" style="gap:60px">
+    <div class="col"><div class="tag">Não olha</div><p class="small">A sintaxe, que o loop do agente já corrige, nem resultado vazio, que é a resposta certa para um item que não existe.</p></div>
+    <div class="col"><div class="tag">Limite</div><p class="small">No máximo 2 devoluções. A devolução entra na mesma conversa, e o agente reaproveita as consultas que já fez.</p></div>
+  </div>
+  <aside class="notes">
+    <p>“Na dúvida, aprove”: o verificador só objeta com evidência, para não forçar o agente a trocar uma resposta certa.</p>
+  </aside>
+</section>
+
+<!-- 14 · As perguntas -->
+<section class="slide" data-section="Avaliação">
+  <div class="label r">Avaliação</div>
+  <h2 class="r">20 perguntas, com o gabarito calculado nos bancos</h2>
+  <table class="t r" style="font-size:23px">
+    <tr><th>Categoria</th><th>SQL</th><th>Cypher</th><th>Os dois</th><th>Exemplo</th></tr>
+    <tr><td>Busca com filtro</td><td class="mono">P01 P02</td><td class="mono">P09 P10</td><td></td><td>bairros que fazem divisa com Pinheiros</td></tr>
+    <tr><td>Item específico</td><td class="mono">P03 P04</td><td class="mono">P11</td><td></td><td>preço, nota e bairro de um anúncio</td></tr>
+    <tr><td>Comparação</td><td class="mono">P05 P06</td><td class="mono">P12</td><td class="mono acc">P15</td><td>Moema × Vila Mariana no preço médio</td></tr>
+    <tr><td>Cálculo</td><td class="mono">P07 P08</td><td class="mono">P13 P14</td><td class="mono">P16 P17</td><td>bairros a duas divisas de Pinheiros</td></tr>
+    <tr><td>Capciosa</td><td class="mono">P18</td><td></td><td></td><td>quantos anúncios a Seazone tem</td></tr>
+    <tr><td>Item inexistente</td><td class="mono">P19</td><td></td><td></td><td>a nota de uma pousada que não existe</td></tr>
+    <tr><td>Fora do escopo</td><td colspan="3" class="mono">P20</td><td>a previsão do tempo</td></tr>
+  </table>
+  <p class="small r">Cada pergunta tem categoria, banco, ferramenta esperada e uma consulta de referência que calcula o gabarito direto nos bancos.</p>
+  <aside class="notes">
+    <p>Bloco 7 · 2:00. Item inexistente e fora do escopo são casos diferentes: no primeiro, consultar e dizer que não existe; no segundo, recusar sem consultar.</p>
+  </aside>
+</section>
+
+<!-- 15 · Como medimos -->
+<section class="slide" data-section="Avaliação">
+  <div class="label r">Avaliação</div>
+  <h2 class="r">60 execuções, três formas de julgar</h2>
+  <div class="flow r" style="gap:16px">
+    <div class="box">20 perguntas × 3 sistemas</div><span class="arrow">→</span>
+    <div class="box">60 execuções, uma linha cada</div><span class="arrow">→</span>
+    <div class="box ghost">execucoes.csv · execucoes.jsonl</div>
+  </div>
+  <div class="grid g3" style="gap:48px">
+    <div class="col rule r"><div class="tag">Checagem automática</div><p class="small">Expressões regulares conferem o que a resposta precisa trazer do gabarito. Barata e imediata.</p></div>
+    <div class="col rule r" style="border-top-color:var(--accent)"><div class="tag acc">Juiz</div><p class="small">Claude Sonnet, chamado pelo Claude Code, com acesso só de leitura ao mesmo servidor MCP. Confere no banco o que a resposta afirma além do gabarito.</p></div>
+    <div class="col rule r"><div class="tag">Revisão humana</div><p class="small">O grupo leu as 60 respostas e deu o veredito final: correta, parcial ou incorreta.</p></div>
+  </div>
+  <div class="spacer"></div>
+  <div class="col r" style="gap:12px">
+    <div class="tag">Medido em cada execução</div>
+    <p class="small fg" style="font-size:22px">acerto · trajetória · latência média, mediana e p95 · tokens de entrada e saída · chamadas ao modelo e às ferramentas · CPU, RAM e GPU · consultas válidas · acerto de rota · devoluções</p>
+  </div>
+  <aside class="notes">
+    <p>O juiz roda depois das 60 execuções, separado, para não pesar na latência dos agentes. Ele recebe a pergunta, o gabarito e a resposta, mas não a trajetória.</p>
+    <p>Parcial conta como erro no acerto.</p>
+  </aside>
+</section>
+
+<!-- 16 · Resultado principal -->
+<section class="slide" data-section="Resultados">
+  <div class="label r">Resultados</div>
+  <h2 class="r">O verificador acertou mais</h2>
+  <div class="hbars r" style="margin-top:16px">
+    <div class="hbar" style="--d:0"><div class="name"><span class="dot d1"></span>Agente único</div><div class="track"><div class="fill" style="--w:55%;background:var(--s1)"></div></div><div class="val">55%</div></div>
+    <div class="hbar" style="--d:1"><div class="name"><span class="dot d2"></span>Roteamento</div><div class="track"><div class="fill" style="--w:40%;background:var(--s2)"></div></div><div class="val">40%</div></div>
+    <div class="hbar" style="--d:2"><div class="name"><span class="dot d3"></span>Verificador</div><div class="track"><div class="fill" style="--w:70%;background:var(--s3)"></div></div><div class="val acc">70%</div></div>
+  </div>
+  <div class="spacer"></div>
+  <table class="t r" style="font-size:22px">
+    <tr><th></th><th class="n">agente único</th><th class="n">roteamento</th><th class="n">verificador</th></tr>
+    <tr><td>tokens por pergunta (entrada + saída)</td><td class="n">7.046</td><td class="n">5.134</td><td class="n">14.822</td></tr>
+    <tr><td>latência mediana · p95</td><td class="n">7,0 s · 32,5 s</td><td class="n">7,6 s · 47,6 s</td><td class="n">9,8 s · 71,5 s</td></tr>
+    <tr><td>trajetória esperada seguida</td><td class="n">75%</td><td class="n">75%</td><td class="n">85%</td></tr>
+    <tr><td>consultas escritas que rodaram sem erro</td><td class="n">88%</td><td class="n">93%</td><td class="n">83%</td></tr>
+  </table>
+  <aside class="notes">
+    <p>Bloco 8 · 3:30. Acerto final pela revisão humana, 20 perguntas por sistema.</p>
+    <p>O roteamento é o mais barato e o que tem mais consultas válidas, e mesmo assim o que menos acerta. Consulta válida não é consulta certa.</p>
+  </aside>
+</section>
+
+<!-- 17 · Acerto x custo -->
+<section class="slide" data-section="Resultados">
+  <div class="label r">Resultados</div>
+  <h2 class="r">+15 pontos de acerto pelo dobro de tokens</h2>
+  <div class="grid g2 r" style="gap:48px">
+    <svg class="chart" viewBox="0 0 640 440" role="img" aria-label="Acerto por tokens por pergunta">
+      <text x="70" y="22" font-size="15" fill="var(--fg)">acerto × tokens por pergunta</text>
+      <g>
+        <line class="gridline" x1="70" x2="590" y1="380" y2="380"/>
+        <line class="gridline" x1="70" x2="590" y1="297.5" y2="297.5"/>
+        <line class="gridline" x1="70" x2="590" y1="215" y2="215"/>
+        <line class="gridline" x1="70" x2="590" y1="132.5" y2="132.5"/>
+        <line class="gridline" x1="70" x2="590" y1="50" y2="50"/>
+        <text x="58" y="385" font-size="14" text-anchor="end">0%</text>
+        <text x="58" y="302" font-size="14" text-anchor="end">20%</text>
+        <text x="58" y="220" font-size="14" text-anchor="end">40%</text>
+        <text x="58" y="137" font-size="14" text-anchor="end">60%</text>
+        <text x="58" y="55" font-size="14" text-anchor="end">80%</text>
+        <text x="70" y="408" font-size="14" text-anchor="middle">0</text>
+        <text x="200" y="408" font-size="14" text-anchor="middle">4 mil</text>
+        <text x="330" y="408" font-size="14" text-anchor="middle">8 mil</text>
+        <text x="460" y="408" font-size="14" text-anchor="middle">12 mil</text>
+        <text x="590" y="408" font-size="14" text-anchor="middle">16 mil</text>
+      </g>
+      <!-- x = 70 + t/16000*520 ; y = 380 - a/80*330 -->
+      <g class="pop" style="--d:0"><circle cx="299" cy="153.1" r="9" fill="var(--s1)"/><text x="314" y="158" font-size="15" fill="var(--fg)">agente único · 55%</text></g>
+      <g class="pop" style="--d:1"><circle cx="236.9" cy="215" r="9" fill="var(--s2)"/><text x="252" y="220" font-size="15" fill="var(--fg)">roteamento · 40%</text></g>
+      <g class="pop" style="--d:2"><circle cx="551.7" cy="91.3" r="9" fill="var(--s3)"/><text x="536" y="72" font-size="15" text-anchor="end" fill="var(--fg)">verificador · 70%</text></g>
+    </svg>
+    <svg class="chart" viewBox="0 0 640 440" role="img" aria-label="Acerto por latência mediana">
+      <text x="70" y="22" font-size="15" fill="var(--fg)">acerto × latência mediana</text>
+      <g>
+        <line class="gridline" x1="70" x2="590" y1="380" y2="380"/>
+        <line class="gridline" x1="70" x2="590" y1="297.5" y2="297.5"/>
+        <line class="gridline" x1="70" x2="590" y1="215" y2="215"/>
+        <line class="gridline" x1="70" x2="590" y1="132.5" y2="132.5"/>
+        <line class="gridline" x1="70" x2="590" y1="50" y2="50"/>
+        <text x="58" y="385" font-size="14" text-anchor="end">0%</text>
+        <text x="58" y="302" font-size="14" text-anchor="end">20%</text>
+        <text x="58" y="220" font-size="14" text-anchor="end">40%</text>
+        <text x="58" y="137" font-size="14" text-anchor="end">60%</text>
+        <text x="58" y="55" font-size="14" text-anchor="end">80%</text>
+        <text x="70" y="408" font-size="14" text-anchor="middle">0 s</text>
+        <text x="200" y="408" font-size="14" text-anchor="middle">3 s</text>
+        <text x="330" y="408" font-size="14" text-anchor="middle">6 s</text>
+        <text x="460" y="408" font-size="14" text-anchor="middle">9 s</text>
+        <text x="590" y="408" font-size="14" text-anchor="middle">12 s</text>
+      </g>
+      <!-- x = 70 + s/12*520 -->
+      <g class="pop" style="--d:0"><circle cx="371.2" cy="153.1" r="9" fill="var(--s1)"/><text x="356" y="134" font-size="15" text-anchor="end" fill="var(--fg)">agente único · 7,0 s</text></g>
+      <g class="pop" style="--d:1"><circle cx="399.7" cy="215" r="9" fill="var(--s2)"/><text x="415" y="220" font-size="15" fill="var(--fg)">roteamento · 7,6 s</text></g>
+      <g class="pop" style="--d:2"><circle cx="494" cy="91.3" r="9" fill="var(--s3)"/><text x="479" y="72" font-size="15" text-anchor="end" fill="var(--fg)">verificador · 9,8 s</text></g>
+    </svg>
+  </div>
+  <p class="small r">Os dois painéis usam a mesma escala de acerto. Na p95, o verificador chega a 71,5 s, contra 32,5 s do agente único.</p>
+  <aside class="notes">
+    <p>O ganho do verificador tem um custo conhecido: 2,1 vezes os tokens e uma cauda de latência mais longa.</p>
+  </aside>
+</section>
+
+<!-- 18 · Por banco -->
+<section class="slide" data-section="Resultados">
+  <div class="label r">Resultados</div>
+  <h2 class="r">O ponto fraco do modelo é o Cypher</h2>
+  <div class="grid r" style="grid-template-columns:1fr 340px;gap:48px;align-items:center">
+    <svg class="chart" viewBox="0 0 960 440" role="img" aria-label="Acerto por banco e por sistema">
+      <!-- y = 370 - v*3 -->
+      <line class="gridline" x1="70" x2="940" y1="370" y2="370"/>
+      <line class="gridline" x1="70" x2="940" y1="295" y2="295"/>
+      <line class="gridline" x1="70" x2="940" y1="220" y2="220"/>
+      <line class="gridline" x1="70" x2="940" y1="145" y2="145"/>
+      <line class="gridline" x1="70" x2="940" y1="70" y2="70"/>
+      <text x="58" y="375" font-size="14" text-anchor="end">0%</text>
+      <text x="58" y="225" font-size="14" text-anchor="end">50%</text>
+      <text x="58" y="75" font-size="14" text-anchor="end">100%</text>
+      <!-- grupos: centros 225, 505, 785 ; barras 64 px, 12 px de folga -->
+      <g>
+        <rect class="grow" style="--d:0" x="143" y="160" width="64" height="210" rx="3" fill="var(--s1)"/>
+        <rect class="grow" style="--d:1" x="219" y="190" width="64" height="180" rx="3" fill="var(--s2)"/>
+        <rect class="grow" style="--d:2" x="295" y="130" width="64" height="240" rx="3" fill="var(--s3)"/>
+        <g class="pop" style="--d:2" font-size="16" text-anchor="middle">
+          <text x="175" y="150" fill="var(--fg)">70%</text><text x="251" y="180" fill="var(--fg)">60%</text><text x="327" y="120" fill="var(--fg)">80%</text>
+        </g>
+        <text x="251" y="402" font-size="16" text-anchor="middle" fill="var(--fg)">SQL</text>
+        <text x="251" y="424" font-size="14" text-anchor="middle">10 perguntas</text>
+      </g>
+      <g>
+        <rect class="grow" style="--d:3" x="423" y="271" width="64" height="99" rx="3" fill="var(--s1)"/>
+        <rect class="grow" style="--d:4" x="499" y="319" width="64" height="51" rx="3" fill="var(--s2)"/>
+        <rect class="grow" style="--d:5" x="575" y="220" width="64" height="150" rx="3" fill="var(--s3)"/>
+        <g class="pop" style="--d:4" font-size="16" text-anchor="middle">
+          <text x="455" y="261" fill="var(--fg)">33%</text><text x="531" y="309" fill="var(--fg)">17%</text><text x="607" y="210" fill="var(--fg)">50%</text>
+        </g>
+        <text x="531" y="402" font-size="16" text-anchor="middle" fill="var(--fg)">Cypher</text>
+        <text x="531" y="424" font-size="14" text-anchor="middle">6 perguntas</text>
+      </g>
+      <g>
+        <rect class="grow" style="--d:6" x="703" y="271" width="64" height="99" rx="3" fill="var(--s1)"/>
+        <rect class="grow" style="--d:7" x="779" y="368" width="64" height="2" rx="1" fill="var(--s2)"/>
+        <rect class="grow" style="--d:8" x="855" y="169" width="64" height="201" rx="3" fill="var(--s3)"/>
+        <g class="pop" style="--d:6" font-size="16" text-anchor="middle">
+          <text x="735" y="261" fill="var(--fg)">33%</text><text x="811" y="358" fill="var(--fg)">0%</text><text x="887" y="159" fill="var(--fg)">67%</text>
+        </g>
+        <text x="811" y="402" font-size="16" text-anchor="middle" fill="var(--fg)">Os dois bancos</text>
+        <text x="811" y="424" font-size="14" text-anchor="middle">3 perguntas</text>
+      </g>
+    </svg>
+    <div class="col" style="gap:18px">
+      <div class="flow" style="gap:10px"><span class="dot d1"></span><span class="small fg">agente único</span></div>
+      <div class="flow" style="gap:10px"><span class="dot d2"></span><span class="small fg">roteamento</span></div>
+      <div class="flow" style="gap:10px"><span class="dot d3"></span><span class="small fg">verificador</span></div>
+      <p class="small" style="margin-top:20px">Os três sistemas acertam mais no SQL do que no grafo. A P20, fora do escopo, fica fora deste gráfico.</p>
+    </div>
+  </div>
+  <aside class="notes">
+    <p>O roteamento zerou nas híbridas: são as perguntas em que um especialista depende do resultado do outro.</p>
+  </aside>
+</section>
+
+<!-- 19 · Verificador -->
+<section class="slide" data-section="Resultados">
+  <div class="label r"><span class="dot d3" style="margin-right:2px"></span>Verificador</div>
+  <h2 class="r">6 devoluções, 4 respostas corrigidas, nenhuma certa estragada</h2>
+  <div class="grid g3 r" style="gap:24px 40px;margin-top:6px">
+    <div class="rule flow" style="justify-content:space-between"><span class="mono fg" style="font-size:26px">P06</span><span class="pill ok">virou correta</span></div>
+    <div class="rule flow" style="justify-content:space-between"><span class="mono fg" style="font-size:26px">P09</span><span class="pill ok">virou correta</span></div>
+    <div class="rule flow" style="justify-content:space-between"><span class="mono fg" style="font-size:26px">P12</span><span class="pill ok">virou correta</span></div>
+    <div class="rule flow" style="justify-content:space-between"><span class="mono fg" style="font-size:26px">P17</span><span class="pill ok">virou correta</span></div>
+    <div class="rule flow" style="justify-content:space-between"><span class="mono fg" style="font-size:26px">P15</span><span class="pill warn">incorreta → parcial</span></div>
+    <div class="rule flow" style="justify-content:space-between"><span class="mono fg" style="font-size:26px">P10</span><span class="pill bad">continuou errada</span></div>
+  </div>
+  <div class="spacer"></div>
+  <div class="grid g2 r" style="gap:60px">
+    <div class="col"><div class="tag">O efeito</div><p class="small">Antes das devoluções, as respostas da mesma rodada acertavam 50%. As 4 correções levaram o acerto a 70%.</p></div>
+    <div class="col"><div class="tag">O limite</div><p class="small">Ele é o mesmo modelo. Aprovou os erros que ele mesmo cometeria: o contador da vida toda (P04), o número só de São Paulo (P18) e a seta no <code>BORDERS</code>.</p></div>
+  </div>
+  <aside class="notes">
+    <p>O juiz julgou também a primeira resposta de cada devolução, e é daí que sai essa contagem.</p>
+  </aside>
+</section>
+
+<!-- 20 · Roteamento -->
+<section class="slide" data-section="Resultados">
+  <div class="label r"><span class="dot d2" style="margin-right:2px"></span>Roteamento</div>
+  <h2 class="r">Rota certa em todas as perguntas, e o pior acerto</h2>
+  <div class="grid" style="grid-template-columns:auto auto 1fr;gap:90px;align-items:end;margin-top:10px">
+    <div class="stat r"><b>20 / 20</b><span>rotas certas</span></div>
+    <div class="stat r"><b style="color:var(--s2)">40%</b><span>de acerto</span></div>
+    <div></div>
+  </div>
+  <div class="grid g3" style="gap:48px;margin-top:20px">
+    <div class="col rule r"><div class="tag">Menos contexto</div><p class="small">Com um esquema só, os especialistas perderam a orientação geral que o agente único tem, e escreveram consultas que rodam mas não respondem.</p></div>
+    <div class="col rule r"><div class="tag">Desiste no vazio</div><p class="small">O especialista do grafo para no primeiro resultado vazio: “não há registros de bairros vizinhos para Pinheiros”.</p></div>
+    <div class="col rule r"><div class="tag">Ferramenta esquecida</div><p class="small">Ele tem o <code>buscar_entidade</code>, mas nunca o chamou. Na P10, inventou <code>listing_id = 123</code>.</p></div>
+  </div>
+  <div class="spacer"></div>
+  <p class="small r">A hipótese era que menos contexto ajudaria. Com um modelo de 8B, atrapalhou.</p>
+  <aside class="notes">
+    <p>O roteador fez o trabalho dele. O problema estava depois dele, nos especialistas.</p>
+  </aside>
+</section>
+
+<!-- 21 · Onde o modelo erra -->
+<section class="slide" data-section="Resultados">
+  <div class="label r">Resultados</div>
+  <h2 class="r">Uma seta muda a resposta</h2>
+  <div class="grid g2" style="gap:36px">
+    <div class="col r">
+      <div class="tag">O que o modelo escreveu</div>
+      <pre class="code"><span class="k">MATCH</span> (p:Neighbourhood {name: <span class="s">'Pinheiros'</span>})
+      -[:BORDERS]<span class="acc">-&gt;</span>(v:Neighbourhood)
+<span class="k">RETURN</span> v.name</pre>
+      <div class="result"><b>0</b> linhas, e o modelo responde “sem vizinhos”</div>
+    </div>
+    <div class="col r">
+      <div class="tag acc">Sem direção</div>
+      <pre class="code"><span class="k">MATCH</span> (p:Neighbourhood {name: <span class="s">'Pinheiros'</span>})
+      -[:BORDERS]<span class="acc">-</span>(v:Neighbourhood)
+<span class="k">RETURN</span> v.name</pre>
+      <div class="result"><b class="acc">6</b> bairros</div>
+    </div>
+  </div>
+  <p class="small r">Cada par de vizinhos está gravado numa direção só. P10, P13 e P14 erram nos três sistemas por isso. O servidor avisa; o modelo lê o aviso e responde com o resultado errado assim mesmo.</p>
+  <div class="spacer"></div>
+  <div class="grid g2 r" style="gap:60px">
+    <div class="rule"><div class="tag">Também erram nos três</div><p class="small">P04: 742 avaliações em 2025, o contador da vida toda, em vez de 40.</p></div>
+    <div class="rule"><div class="tag">&nbsp;</div><p class="small">P18: “a Seazone tem 209 anúncios em São Paulo”, sem os 3.435 do Airbnb inteiro.</p></div>
+  </div>
+  <aside class="notes">
+    <p>O erro mais comum de todo o experimento é este. O aviso do servidor não bastou para um modelo de 8B: precisaria vir como erro, ou a relação existir nas duas direções.</p>
+  </aside>
+</section>
+
+<!-- 22 · P15 -->
+<section class="slide" data-section="Resultados">
+  <div class="label r">De volta à P15</div>
+  <h2 class="r">“O preço médio dos vizinhos de Pinheiros é maior ou menor que o de Pinheiros?”</h2>
+  <div class="col" style="gap:22px">
+    <div class="grid r" style="grid-template-columns:260px 1fr 220px;gap:32px;align-items:center;border-top:1px solid var(--line);padding-top:20px">
+      <div class="flow" style="gap:12px;font-size:25px"><span class="dot d1"></span>Agente único</div>
+      <p class="small">Procurou os vizinhos pela subprefeitura, no SQL. A consulta voltou vazia, e ele não respondeu.</p>
+      <span class="pill bad" style="justify-self:end">incorreta</span>
+    </div>
+    <div class="grid r" style="grid-template-columns:260px 1fr 220px;gap:32px;align-items:center;border-top:1px solid var(--line);padding-top:20px">
+      <div class="flow" style="gap:12px;font-size:25px"><span class="dot d2"></span>Roteamento</div>
+      <p class="small">Rota certa, os dois bancos. O especialista do grafo não achou os vizinhos, e o sistema concluiu que Pinheiros não tem vizinhos.</p>
+      <span class="pill bad" style="justify-self:end">incorreta</span>
+    </div>
+    <div class="grid r" style="grid-template-columns:260px 1fr 220px;gap:32px;align-items:center;border-top:1px solid var(--line);padding-top:20px">
+      <div class="flow" style="gap:12px;font-size:25px"><span class="dot d3"></span>Verificador</div>
+      <p class="small">Depois da devolução, achou os 6 vizinhos e acertou “maior”. Mas tirou a média das médias dos bairros: R$ 514,45.</p>
+      <span class="pill warn" style="justify-self:end">parcial</span>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="flow r" style="gap:20px">
+    <span class="tag">Gabarito</span>
+    <span class="fg" style="font-size:26px">maior: <span class="mono">R$ 483,61</span> nos vizinhos × <span class="mono">R$ 434,23</span> em Pinheiros</span>
+  </div>
+  <aside class="notes">
+    <p>A P15 resume o experimento: cada sistema erra de um jeito diferente, e o verificador é o único que chega perto.</p>
+  </aside>
+</section>
+
+<!-- 23 · Confiança -->
+<section class="slide" data-section="Resultados">
+  <div class="label r">Os julgamentos</div>
+  <h2 class="r">Juiz, humano e checagem chegam à mesma ordem</h2>
+  <div class="grid" style="grid-template-columns:1fr 1fr 1.3fr;gap:64px;align-items:start;margin-top:10px">
+    <div class="stat r"><b class="acc">98%</b><span>de concordância entre juiz e revisão humana, kappa 0,97</span></div>
+    <div class="stat r"><b>97%</b><span>entre a checagem automática e a revisão humana, kappa 0,93</span></div>
+    <table class="t r" style="font-size:22px">
+      <tr><th>Acerto</th><th class="n">único</th><th class="n">rot.</th><th class="n">verif.</th></tr>
+      <tr><td>revisão humana</td><td class="n">55%</td><td class="n">40%</td><td class="n">70%</td></tr>
+      <tr><td>juiz</td><td class="n">55%</td><td class="n">35%</td><td class="n">70%</td></tr>
+      <tr><td>checagem automática</td><td class="n">55%</td><td class="n">40%</td><td class="n">70%</td></tr>
+    </table>
+  </div>
+  <div class="spacer"></div>
+  <div class="grid g2 r" style="gap:60px">
+    <div class="col"><div class="tag">Onde divergiram</div><p class="small">O juiz é um pouco mais severo no “parcial”. Na P12 do roteamento, exigiu os dois números; o humano aceitou, porque a pergunta só pede quem tem mais.</p></div>
+    <div class="col"><div class="tag">O que isso garante</div><p class="small">A conclusão não depende de quem julgou: verificador, depois agente único, depois roteamento, nas três medidas.</p></div>
+  </div>
+  <aside class="notes">
+    <p>Vereditos iguais em 57 de 60. O regex não pega afirmação extra errada; o juiz pega, porque consulta o banco.</p>
+  </aside>
+</section>
+
+<!-- 24 · Conclusão -->
+<section class="slide" data-section="Conclusão">
+  <div class="label r">Conclusão</div>
+  <p class="lead r" style="font-size:28px">Vale a pena usar mais de um agente?</p>
+  <div class="grid g2" style="gap:80px;margin-top:10px">
+    <div class="col r" style="gap:22px">
+      <h1 style="font-size:96px;color:var(--s3)">Sim,</h1>
+      <h3 style="font-size:34px">no formato do verificador.</h3>
+      <p class="small">+15 pontos de acerto, com um custo conhecido: o dobro de tokens e uma cauda de latência maior.</p>
+    </div>
+    <div class="col r" style="gap:22px">
+      <h1 style="font-size:96px;color:var(--s2)">Não,</h1>
+      <h3 style="font-size:34px">no formato do roteamento.</h3>
+      <p class="small">Escolher o banco certo não bastou. Dividir o contexto custou mais acerto do que economizou em tokens.</p>
+    </div>
+  </div>
+  <aside class="notes">
+    <p>Bloco 9 · 1:30. Responder à pergunta do começo, com os números.</p>
+  </aside>
+</section>
+
+<!-- 25 · Lições -->
+<section class="slide" data-section="Conclusão">
+  <div class="label r">Conclusão</div>
+  <h2 class="r">O que aprendemos</h2>
+  <div class="grid g3" style="gap:56px">
+    <div class="col rule r"><h3>O gargalo é o sentido</h3><p class="small">Com um modelo de 8B, quase nenhuma consulta falha na sintaxe. Elas rodam e respondem outra pergunta.</p></div>
+    <div class="col rule r"><h3>Menos contexto não ajudou</h3><p class="small">Os especialistas do roteamento perderam a visão geral e erraram mais do que o agente único.</p></div>
+    <div class="col rule r"><h3>Aviso não basta</h3><p class="small">O modelo lê o aviso da seta e responde errado assim mesmo. A correção precisa estar nos dados ou virar erro.</p></div>
+  </div>
+  <div class="spacer"></div>
+  <div class="grid g2 r" style="gap:60px">
+    <div class="col"><div class="tag">Limitações</div><p class="small">20 perguntas, uma rodada e um modelo só.</p></div>
+    <div class="col"><div class="tag">Próximo passo</div><p class="small">O Trabalho 3 reaproveita o servidor MCP, as perguntas e o juiz.</p></div>
+  </div>
+  <aside class="notes">
+    <p>Fechar com o que levamos do projeto e com o que ele não mostra.</p>
+  </aside>
+</section>
+
+<!-- 26 · Encerramento -->
+<section class="slide" data-section="Encerramento">
+  <div class="label r">Obrigado</div>
+  <div class="spacer"></div>
+  <h1 class="r" style="font-size:80px">Código, dados de execução e análise</h1>
+  <p class="lead r mono" style="font-size:28px;color:var(--fg)">github.com/felipeafigueiredo/text-to-sql-and-cypher</p>
+  <p class="small r">Os notebooks rodam no Google Colab. A análise completa está em <code>notebooks/04_analise.ipynb</code>.</p>
+  <div class="spacer"></div>
+  <aside class="notes">
+    <p>Bloco 10 · 0:30. Agradecer e mostrar onde está tudo.</p>
+  </aside>
+</section>
+
+</main>
+</div>
+
+<div class="notes-panel" id="notesPanel" aria-live="polite">
+  <div class="nh" id="notesHead">Notas</div>
+  <div id="notesBody"></div>
+</div>
+
+<nav class="bar" aria-label="Navegação dos slides">
+  <button type="button" id="prev" aria-label="Slide anterior">‹</button>
+  <button type="button" id="next" aria-label="Próximo slide">›</button>
+  <span class="hint" id="hint">← → navegar · N notas · F tela cheia · T tema</span>
+  <div class="progress"><i id="progress"></i></div>
+  <span class="count" id="count">1 / 1</span>
+</nav>
+
+<script>
+(function () {
+  var stage = document.getElementById('stage');
+  var slides = Array.prototype.slice.call(stage.querySelectorAll('.slide'));
+  var total = slides.length;
+  var current = 0;
+  var notesOpen = false;
+  var panel = document.getElementById('notesPanel');
+  var notesBody = document.getElementById('notesBody');
+  var notesHead = document.getElementById('notesHead');
+  var hint = document.getElementById('hint');
+
+  slides.forEach(function (s) {
+    s.querySelectorAll('.r').forEach(function (el, i) {
+      if (!el.style.getPropertyValue('--d')) el.style.setProperty('--d', i);
+    });
+  });
+
+  function fit() {
+    var w = window.innerWidth, h = window.innerHeight - 48;
+    var scale = Math.min(w / 1600, h / 900);
+    stage.style.setProperty('--scale', Math.max(scale, 0.1));
+    stage.style.top = 'calc(50% - 18px)';
+  }
+
+  function fromHash() {
+    var n = parseInt((location.hash || '').replace('#', ''), 10);
+    return isNaN(n) ? 0 : Math.min(Math.max(n - 1, 0), total - 1);
+  }
+
+  function go(n, fromHashChange) {
+    n = Math.min(Math.max(n, 0), total - 1);
+    slides.forEach(function (s, i) {
+      s.classList.toggle('is-active', i === n);
+      s.classList.toggle('is-past', i < n);
+      s.setAttribute('aria-hidden', i === n ? 'false' : 'true');
+    });
+    if (n !== current) hint.classList.add('gone');
+    current = n;
+    document.getElementById('count').textContent = (n + 1) + ' / ' + total;
+    document.getElementById('progress').style.width = (total > 1 ? (n / (total - 1)) * 100 : 100) + '%';
+    var notes = slides[n].querySelector('.notes');
+    notesHead.textContent = 'Notas · ' + (slides[n].dataset.section || '') + ' · slide ' + (n + 1);
+    notesBody.innerHTML = notes ? notes.innerHTML : '<p>Sem notas.</p>';
+    if (!fromHashChange && location.hash !== '#' + (n + 1)) {
+      try { history.replaceState(null, '', '#' + (n + 1)); } catch (e) { location.hash = String(n + 1); }
+    }
+  }
+
+  function toggleTheme() {
+    var root = document.documentElement;
+    var dark = root.getAttribute('data-theme') === 'dark' ||
+      (!root.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    root.setAttribute('data-theme', dark ? 'light' : 'dark');
+  }
+
+  function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function () {});
+    } catch (e) {}
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var k = e.key;
+    if (k === 'ArrowRight' || k === 'PageDown' || k === ' ' || k === 'ArrowDown') { e.preventDefault(); go(current + 1); }
+    else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'ArrowUp') { e.preventDefault(); go(current - 1); }
+    else if (k === 'Home') { go(0); }
+    else if (k === 'End') { go(total - 1); }
+    else if (k === 'n' || k === 'N') { notesOpen = !notesOpen; panel.classList.toggle('open', notesOpen); }
+    else if (k === 'f' || k === 'F') { toggleFullscreen(); }
+    else if (k === 't' || k === 'T') { toggleTheme(); }
+  });
+
+  document.getElementById('prev').addEventListener('click', function () { go(current - 1); });
+  document.getElementById('next').addEventListener('click', function () { go(current + 1); });
+
+  var tx = null, ty = null;
+  document.addEventListener('touchstart', function (e) { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive: true });
+  document.addEventListener('touchend', function (e) {
+    if (tx === null) return;
+    var dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) go(current + (dx < 0 ? 1 : -1));
+    tx = ty = null;
+  }, { passive: true });
+
+  window.addEventListener('resize', fit);
+  window.addEventListener('hashchange', function () { go(fromHash(), true); });
+  fit();
+  go(fromHash(), true);
+})();
+</script>
+</body>
+</html>
